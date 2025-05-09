@@ -94,6 +94,9 @@ static uint64_t gdt[3] = {0, 0x00af9a000000ffff, 0x00cf92000000ffff};
 
 	 It is not safe to call thread_current() until this function
 	 finishes. */
+//  main 함수에서 호출, thread system 시작, initial thread 생성
+//  thread stack의 top에 Push
+// magic??
 void thread_init(void)
 {
 	ASSERT(intr_get_level() == INTR_OFF);
@@ -121,10 +124,11 @@ void thread_init(void)
 
 /* Starts preemptive thread scheduling by enabling interrupts.
 	 Also creates the idle thread. */
+//  IDLE Thread 생성
 void thread_start(void)
 {
 	/* Create the idle thread. */
-	struct semaphore idle_started;
+	struct semaphore idle_started; // idle thread로 설정?
 	sema_init(&idle_started, 0);
 	thread_create("idle", PRI_MIN, idle, &idle_started);
 
@@ -137,22 +141,23 @@ void thread_start(void)
 
 /* Called by the timer interrupt handler at each timer tick.
 	 Thus, this function runs in an external interrupt context. */
+//  매 tick 마다 timer interrupt 호출,
 void thread_tick(void)
 {
 	struct thread *t = thread_current();
 
 	/* Update statistics. */
 	if (t == idle_thread)
-		idle_ticks++;
+		idle_ticks++; // 유휴 상태 ticks 갱신
 #ifdef USERPROG
 	else if (t->pml4 != NULL)
 		user_ticks++;
 #endif
 	else
-		kernel_ticks++;
+		kernel_ticks++; // 🚨 Kernal_ticks??
 
 	/* Enforce preemption. */
-	if (++thread_ticks >= TIME_SLICE)
+	if (++thread_ticks >= TIME_SLICE) // thread_ticks = of timer ticks since last yield.b
 		intr_yield_on_return();
 }
 
@@ -181,8 +186,8 @@ void thread_print_stats(void)
 tid_t thread_create(const char *name, int priority,
 										thread_func *function, void *aux)
 {
-	struct thread *t;
-	tid_t tid;
+	struct thread *t; // 새로운 스레드 담을 변수
+	tid_t tid;				// 스레드 ID
 
 	ASSERT(function != NULL);
 
@@ -222,8 +227,8 @@ void thread_block(void)
 {
 	ASSERT(!intr_context());
 	ASSERT(intr_get_level() == INTR_OFF);
-	thread_current()->status = THREAD_BLOCKED;
-	schedule();
+	thread_current()->status = THREAD_BLOCKED; // BLOCK 상태로 변경
+	schedule();																 // 상태 변경 반영
 }
 
 /* Transitions a blocked thread T to the ready-to-run state.
@@ -234,17 +239,17 @@ void thread_block(void)
 	 be important: if the caller had disabled interrupts itself,
 	 it may expect that it can atomically unblock a thread and
 	 update other data. */
-void thread_unblock(struct thread *t)
+void thread_unblock(struct thread *t) // wakeup 역할?
 {
 	enum intr_level old_level;
 
 	ASSERT(is_thread(t));
 
 	old_level = intr_disable();
-	ASSERT(t->status == THREAD_BLOCKED);
-	list_push_back(&ready_list, &t->elem);
-	t->status = THREAD_READY;
-	intr_set_level(old_level);
+	ASSERT(t->status == THREAD_BLOCKED);	 // Block이 아니면 ASSERT
+	list_push_back(&ready_list, &t->elem); // Ready list tail로 인자로 받은 thread push
+	t->status = THREAD_READY;							 // BLOCK -> READY
+	intr_set_level(old_level);						 // disabled 되었던 인터럽트 다시 abled
 }
 
 /* Returns the name of the running thread. */
@@ -315,6 +320,7 @@ void thread_yield(void)
 // ✅
 void thread_sleep(int64_t ticks)
 {
+	// 🚨  ticks => 일어나야할 시간
 	/* if the current thread is not idle thread,
 	change the state of the caller thread to BLOCKED,
 	store the local tick to wake up,
@@ -322,20 +328,23 @@ void thread_sleep(int64_t ticks)
 	and call schedule() */
 	/* When you manipulate thread list, disable interrupt! */
 
-	struct thread *curr = thread_current(); // 현재 실행중인 스레드
-	enum intr_level old_level;
+	struct thread *curr = thread_current(); // 재울 현재 스레드
+	enum intr_level old_level;							// 인터럽트
 
-	old_level = intr_disable(); // 인터럽트 disabled(/* Disables interrupts and returns the previous interrupt status. */)
-
-	// 1. 현재 thread가 idle인 경우 =>
-	// 2. 현재 thread가 idle아니고 실제 쓰레드
+	old_level = intr_disable();
+	// 1. 스레드 상태 BLOCK 변경
+	// thread_block();
+	curr->status = THREAD_BLOCKED;
+	// 2. 스레드의 wakeup_tick에 parameter로 받아온 ticks 저장
+	curr->wakeup_tick = ticks;
+	// 2. Sleep Queue의 tail에 push
 	if (curr != idle_thread)
 	{
-		list_push_back(&sleep_list, &curr->elem); // 두번째 인자?🚨
+		list_push_back(&sleep_list, &curr->elem);
 	}
-	printf("sleep_list의 header...? %p", &sleep_list);
-	do_schedule(THREAD_BLOCKED); // Block 상태 변경
-	intr_set_level(old_level);	 // disabled 한거 다시 되돌리기
+	schedule();
+	// 3. 인터럽트 다시 활성화
+	intr_set_level(old_level);
 }
 
 /* Sets the current thread's priority to NEW_PRIORITY. */

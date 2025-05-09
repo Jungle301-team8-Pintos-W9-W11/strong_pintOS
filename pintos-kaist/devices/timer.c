@@ -131,12 +131,20 @@ void timer_print_stats(void)
 	printf("Timer: %" PRId64 " ticks\n", timer_ticks());
 }
 
-/* Timer interrupt handler. */
+/* ✅ Timer interrupt handler. */
 static void
 timer_interrupt(struct intr_frame *args UNUSED)
 {
-	ticks++;
+	ticks++; // OS 부팅이후 지난 시간
+	// 매 time tick 마다 타임 인터럽트 호출
 	thread_tick(); // update the cpu usage for running process
+
+	/* code to add:
+	1. check sleep list and the global tick.
+	2. find any threads to wake up,
+	3. move them to the ready list if necessary. => wakeup함수 호출
+	4. update the global tick.
+	*/
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
