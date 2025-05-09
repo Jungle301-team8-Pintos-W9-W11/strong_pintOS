@@ -315,13 +315,27 @@ void thread_yield(void)
 // ✅
 void thread_sleep(int64_t ticks)
 {
-
 	/* if the current thread is not idle thread,
 	change the state of the caller thread to BLOCKED,
 	store the local tick to wake up,
 	update the global tick if necessary,
 	and call schedule() */
 	/* When you manipulate thread list, disable interrupt! */
+
+	struct thread *curr = thread_current(); // 현재 실행중인 스레드
+	enum intr_level old_level;
+
+	old_level = intr_disable(); // 인터럽트 disabled(/* Disables interrupts and returns the previous interrupt status. */)
+
+	// 1. 현재 thread가 idle인 경우 =>
+	// 2. 현재 thread가 idle아니고 실제 쓰레드
+	if (curr != idle_thread)
+	{
+		list_push_back(&sleep_list, &curr->elem); // 두번째 인자?🚨
+	}
+	printf("sleep_list의 header...? %p", &sleep_list);
+	do_schedule(THREAD_BLOCKED); // Block 상태 변경
+	intr_set_level(old_level);	 // disabled 한거 다시 되돌리기
 }
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
