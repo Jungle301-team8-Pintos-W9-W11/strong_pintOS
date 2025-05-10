@@ -91,9 +91,9 @@ timer_elapsed(int64_t then)
 }
 
 /* Suspends execution for approximately TICKS timer ticks. */
-void timer_sleep(int64_t ticks)
+void timer_sleep(int64_t ticks) // ticks 경과 후 깰 시간 (5분)
 {
-	int64_t start = timer_ticks();
+	int64_t start = timer_ticks(); // OS 부팅 후 경과 시간(12시)
 
 	ASSERT(intr_get_level() == INTR_ON);
 	// Busy Waiting 상태
@@ -103,7 +103,7 @@ void timer_sleep(int64_t ticks)
 	// ✅ thread_sleep 활용으로 수정
 	if (timer_elapsed(start) < ticks)
 	{
-		thread_sleep(start + ticks);
+		thread_sleep(start + ticks); // 12시 + 5분을 넘김
 	}
 }
 
@@ -132,19 +132,22 @@ void timer_print_stats(void)
 }
 
 /* ✅ Timer interrupt handler. */
-static void
-timer_interrupt(struct intr_frame *args UNUSED)
-{
-	ticks++; // OS 부팅이후 지난 시간
-	// 매 time tick 마다 타임 인터럽트 호출
-	thread_tick(); // update the cpu usage for running process
-
-	/* code to add:
+/* code to add:
 	1. check sleep list and the global tick.
 	2. find any threads to wake up,
 	3. move them to the ready list if necessary. => wakeup함수 호출
 	4. update the global tick.
-	*/
+*/
+static void
+timer_interrupt(struct intr_frame *args UNUSED)
+{
+	ticks++; // OS 부팅이후 지난 시간(전체 시간)
+	// 매 time tick 마다 타임 인터럽트 호출
+	thread_tick();									// update the cpu usage for running process
+	if (get_global_tick() <= ticks) // 현재 시간이 global tick보다 크다면 깨울 프로세스 발생
+	{
+		thread_wakeup(ticks); // 프로세스 깨우는 함수 call
+	}
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer

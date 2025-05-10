@@ -48,6 +48,10 @@ static long long idle_ticks;	 /* # of timer ticks spent idle. */
 static long long kernel_ticks; /* # of timer ticks in kernel threads. */
 static long long user_ticks;	 /* # of timer ticks in user programs. */
 
+static int64_t global_tick = INT64_MAX; // ✅ local tick 중 가장 작은 것, 초기 비교위해 최댓값
+// static int64_t get_global_tick();
+// static void set_global_tick(int64_t ticks);
+
 /* Scheduling. */
 #define TIME_SLICE 4					/* # of timer ticks to give each thread. */
 static unsigned thread_ticks; /* # of timer ticks since last yield. */
@@ -227,6 +231,7 @@ void thread_block(void)
 {
 	ASSERT(!intr_context());
 	ASSERT(intr_get_level() == INTR_OFF);
+
 	thread_current()->status = THREAD_BLOCKED; // BLOCK 상태로 변경
 	schedule();																 // 상태 변경 반영
 }
@@ -266,6 +271,7 @@ struct thread *
 thread_current(void)
 {
 	struct thread *t = running_thread();
+	// printf("current Thread: t=%p, t->tid=%d, t->status=%d\n", t, t->tid, t->status);
 
 	/* Make sure T is really a thread.
 		 If either of these assertions fire, then your thread may
@@ -317,6 +323,21 @@ void thread_yield(void)
 	intr_set_level(old_level);
 }
 
+// ✅ 현재 저장된 글로벌 tick 가져오기(getter)
+int64_t get_global_tick()
+{
+	return global_tick;
+}
+
+// ✅ 더 작은 Local tick 등장시 갱신(setter)
+void set_global_tick(int64_t ticks)
+{
+	if (ticks < global_tick)
+	{
+		global_tick = ticks;
+	}
+}
+
 // ✅
 void thread_sleep(int64_t ticks)
 {
@@ -332,19 +353,43 @@ void thread_sleep(int64_t ticks)
 	enum intr_level old_level;							// 인터럽트
 
 	old_level = intr_disable();
+
 	// 1. 스레드 상태 BLOCK 변경
-	// thread_block();
-	curr->status = THREAD_BLOCKED;
+	// curr->status = THREAD_BLOCKED;
+
 	// 2. 스레드의 wakeup_tick에 parameter로 받아온 ticks 저장
-	curr->wakeup_tick = ticks;
-	// 2. Sleep Queue의 tail에 push
+	// 3. Sleep Queue의 tail에 push
 	if (curr != idle_thread)
 	{
+		curr->wakeup_tick = ticks;
 		list_push_back(&sleep_list, &curr->elem);
+		set_global_tick(ticks); // 더 작은 tick인지 검사
 	}
-	schedule();
-	// 3. 인터럽트 다시 활성화
+	thread_block();
+	// 5. 인터럽트 다시 활성화
 	intr_set_level(old_level);
+}
+
+// ✅ sleep 인 thread를 Ready Queue 의 tail로 push
+void thread_wakeup(int64_t ticks) // timer inturrput가 발생한 시각(12시 5분)
+{
+	struct list_elem *curr = list_begin(&sleep_list); // sleep 리스트의 첫 원소
+	struct thread *curr_thread;												// 쓰레드 저장용 변수
+	// 1. 리스트 순회
+	while (curr != list_end(&sleep_list))
+	{
+		curr_thread = list_entry(curr, struct thread, elem); // list elem thread 확인
+		if (curr_thread->wakeup_tick <= ticks)
+		{
+			curr = list_remove(curr);		 // sleep queue 에서 제거
+			thread_unblock(curr_thread); // thread unblock
+		}
+		else
+		{
+			set_global_tick(curr_thread->wakeup_tick); // else, local tick이 global tick 보다 작은 상황
+			curr = list_next(curr);										 // 다음 요소 local tick 검사하러 이동
+		}
+	}
 }
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
