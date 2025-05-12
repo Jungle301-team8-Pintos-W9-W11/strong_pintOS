@@ -190,6 +190,7 @@ void thread_print_stats(void)
 tid_t thread_create(const char *name, int priority,
 										thread_func *function, void *aux)
 {
+
 	struct thread *t; // 새로운 스레드 담을 변수
 	tid_t tid;				// 스레드 ID
 
@@ -217,6 +218,8 @@ tid_t thread_create(const char *name, int priority,
 
 	/* Add to run queue. */
 	thread_unblock(t);
+	// ready_list에 스레드 삽입, 우선순위 비교 후 삽입?
+	// 새로운 스레드의 우선순위가 높다면 schedule 함수 call
 
 	return tid;
 }
@@ -236,6 +239,15 @@ void thread_block(void)
 	schedule();																 // 상태 변경 반영
 }
 
+// list_insert_order의 Less 함수
+bool cmp_priority(struct list_elem *l, struct list_elem *s, void *aux UNUSED)
+{
+	struct thread *first = list_entry(l, struct thread, elem);
+	struct thread *second = list_entry(s, struct thread, elem);
+
+	return first->priority > second->priority;
+}
+
 /* Transitions a blocked thread T to the ready-to-run state.
 	 This is an error if T is not blocked.  (Use thread_yield() to
 	 make the running thread ready.)
@@ -251,10 +263,11 @@ void thread_unblock(struct thread *t) // wakeup 역할?
 	ASSERT(is_thread(t));
 
 	old_level = intr_disable();
-	ASSERT(t->status == THREAD_BLOCKED);	 // Block이 아니면 ASSERT
-	list_push_back(&ready_list, &t->elem); // Ready list tail로 인자로 받은 thread push
-	t->status = THREAD_READY;							 // BLOCK -> READY
-	intr_set_level(old_level);						 // disabled 되었던 인터럽트 다시 abled
+	ASSERT(t->status == THREAD_BLOCKED); // Block이 아니면 ASSERT
+	// list_push_back(&ready_list, &t->elem); // Ready list tail로 인자로 받은 thread push
+	list_insert_ordered(&ready_list, &t->elem, cmp_priority, NULL);
+	t->status = THREAD_READY;	 // BLOCK -> READY
+	intr_set_level(old_level); // disabled 되었던 인터럽트 다시 abled
 }
 
 /* Returns the name of the running thread. */
@@ -352,20 +365,14 @@ void thread_sleep(int64_t ticks)
 	struct thread *curr = thread_current(); // 재울 현재 스레드
 	enum intr_level old_level;							// 인터럽트
 
-	old_level = intr_disable();
-
-	// 1. 스레드 상태 BLOCK 변경
-	// curr->status = THREAD_BLOCKED;
-
-	// 2. 스레드의 wakeup_tick에 parameter로 받아온 ticks 저장
-	// 3. Sleep Queue의 tail에 push
+	old_level = intr_disable(); // 인터럽트 중단
 	if (curr != idle_thread)
 	{
-		curr->wakeup_tick = ticks;
-		list_push_back(&sleep_list, &curr->elem);
-		set_global_tick(ticks); // 더 작은 tick인지 검사
+		curr->wakeup_tick = ticks;								// local tick 저장
+		list_push_back(&sleep_list, &curr->elem); // sleep list에 추가
+		set_global_tick(ticks);										// 더 작은 tick인지 검사(global tick 갱신)
 	}
-	thread_block();
+	thread_block(); // BLOCK 상태 업데이트
 	// 5. 인터럽트 다시 활성화
 	intr_set_level(old_level);
 }
@@ -384,10 +391,10 @@ void thread_wakeup(int64_t ticks) // timer inturrput가 발생한 시각(12시 5
 			curr = list_remove(curr);		 // sleep queue 에서 제거
 			thread_unblock(curr_thread); // thread unblock
 		}
-		else
+		else // else, local tick이 global tick 보다 작은 상황, 깨울 프로세스가 없음
 		{
-			set_global_tick(curr_thread->wakeup_tick); // else, local tick이 global tick 보다 작은 상황
-			curr = list_next(curr);										 // 다음 요소 local tick 검사하러 이동
+			set_global_tick(curr_thread->wakeup_tick);
+			curr = list_next(curr); // 다음 요소 local tick 검사하러 이동
 		}
 	}
 }
