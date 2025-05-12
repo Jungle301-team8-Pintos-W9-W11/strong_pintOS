@@ -190,8 +190,7 @@ void thread_print_stats(void)
 tid_t thread_create(const char *name, int priority,
 										thread_func *function, void *aux)
 {
-
-	struct thread *t; // 새로운 스레드 담을 변수
+	struct thread *t; // 새로운 스레드
 	tid_t tid;				// 스레드 ID
 
 	ASSERT(function != NULL);
@@ -217,9 +216,23 @@ tid_t thread_create(const char *name, int priority,
 	t->tf.eflags = FLAG_IF;
 
 	/* Add to run queue. */
+	// thread_unblock(t); // 여기서 비교랑 다 하는데?
+	/* compare the priorities of the currently running thread and the newly inserted one.
+	Yield the CPU if the newly arriving thread has higher priority*/
+
+	// 새로 생성된 스레드와 현재 Running 중인 스레드를 비교
+	// 만약 새로 생성된 스레드의 우선순위가 높다면
+	// Ready List head와도 비교?
+	// 현재 스레드를 Block
+	// 새롭게 들어오는 스레드가 RUNNING?
+	int curr_priority = thread_get_priority(); // 현재 running 중인 스레드의 우선순위
+
 	thread_unblock(t);
-	// ready_list에 스레드 삽입, 우선순위 비교 후 삽입?
-	// 새로운 스레드의 우선순위가 높다면 schedule 함수 call
+
+	if (!list_empty(&ready_list) && t->priority > curr_priority)
+	{
+		thread_yield(); // 현재 CPU 점유중이던 스레드, CPU 자원 양보
+	}
 
 	return tid;
 }
@@ -242,10 +255,10 @@ void thread_block(void)
 // list_insert_order의 Less 함수
 bool cmp_priority(struct list_elem *l, struct list_elem *s, void *aux UNUSED)
 {
-	struct thread *first = list_entry(l, struct thread, elem);
-	struct thread *second = list_entry(s, struct thread, elem);
+	struct thread *newly = list_entry(l, struct thread, elem);
+	struct thread *list_elem = list_entry(s, struct thread, elem);
 
-	return first->priority > second->priority;
+	return newly->priority > list_elem->priority;
 }
 
 /* Transitions a blocked thread T to the ready-to-run state.
@@ -331,7 +344,8 @@ void thread_yield(void)
 
 	old_level = intr_disable();
 	if (curr != idle_thread)
-		list_push_back(&ready_list, &curr->elem);
+		// ready list에 정렬된 상태로 push
+		list_insert_ordered(&ready_list, &curr->elem, cmp_priority, NULL);
 	do_schedule(THREAD_READY);
 	intr_set_level(old_level);
 }
@@ -403,6 +417,12 @@ void thread_wakeup(int64_t ticks) // timer inturrput가 발생한 시각(12시 5
 void thread_set_priority(int new_priority)
 {
 	thread_current()->priority = new_priority;
+	// list_sort...?
+	list_sort(&ready_list, cmp_priority, NULL);
+	if (!list_empty(&ready_list) && list_entry(list_begin(&ready_list), struct thread, elem)->priority > new_priority)
+	{
+		thread_yield(); // 현재 CPU 점유중이던 스레드, CPU 자원 양보
+	}
 }
 
 /* Returns the current thread's priority. */
