@@ -229,10 +229,7 @@ tid_t thread_create(const char *name, int priority,
 
 	thread_unblock(t);
 
-	if (!list_empty(&ready_list) && t->priority > curr_priority)
-	{
-		thread_yield(); // 현재 CPU 점유중이던 스레드, CPU 자원 양보
-	}
+	recheck_readyQueue();
 
 	return tid;
 }
@@ -413,16 +410,27 @@ void thread_wakeup(int64_t ticks) // timer inturrput가 발생한 시각(12시 5
 	}
 }
 
+/*ReadyQueue 변동시 head 체크 함수*/
+void recheck_readyQueue()
+{
+	int new_priority = thread_current()->priority;
+	struct thread *first_elem = list_entry(list_begin(&ready_list), struct thread, elem);
+
+	if (!list_empty(&ready_list) && first_elem->priority > new_priority)
+	{
+		thread_yield(); // 현재 CPU 점유중이던 스레드, CPU 자원 양보
+	}
+}
+
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void thread_set_priority(int new_priority)
 {
 	thread_current()->priority = new_priority;
+	struct thread *first_elem = list_entry(list_begin(&ready_list), struct thread, elem);
+
 	// list_sort...?
 	list_sort(&ready_list, cmp_priority, NULL);
-	if (!list_empty(&ready_list) && list_entry(list_begin(&ready_list), struct thread, elem)->priority > new_priority)
-	{
-		thread_yield(); // 현재 CPU 점유중이던 스레드, CPU 자원 양보
-	}
+	recheck_readyQueue();
 }
 
 /* Returns the current thread's priority. */

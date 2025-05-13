@@ -140,6 +140,9 @@ int64_t get_global_tick(void);
 void thread_sleep(int64_t ticks);
 void thread_wakeup(int64_t ticks);
 
+bool cmp_priority(struct list_elem *l, struct list_elem *s, void *aux UNUSED);
+void recheck_readyQueue();
+
 int thread_get_priority(void);
 void thread_set_priority(int);
 
