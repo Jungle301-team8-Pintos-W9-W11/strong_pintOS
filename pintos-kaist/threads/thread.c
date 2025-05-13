@@ -86,19 +86,6 @@ bool cmp_priority(struct list_elem *a, struct list_elem *b, void *aux UNUSED){
 	}
 };
 
-bool cmp_priority1(struct list_elem *a, struct list_elem *b, void *aux UNUSED){
-
-	struct thread *first = list_entry(a, struct thread, elem);
-	struct thread *second = list_entry(b, struct thread, elem);
-	if (first->priority > second->priority){
-		return false;
-	}
-	else{
-		return true;
-	}
-};
-
-
 // Global descriptor table for the thread_start.
 // Because the gdt will be setup after the thread_init, we should
 // setup temporal gdt first.
@@ -269,6 +256,7 @@ thread_unblock (struct thread *t) {
 	old_level = intr_disable ();
 	ASSERT (t->status == THREAD_BLOCKED);
 	// list_push_back (&ready_list, &t->elem);
+	
 	list_insert_ordered(&ready_list, &t->elem, cmp_priority, NULL);
 	t->status = THREAD_READY;
 	intr_set_level (old_level);
@@ -390,6 +378,14 @@ thread_set_priority (int new_priority) {
 		thread_yield();
 	}
 
+}
+
+void
+thread_priority_runningChange(){
+	
+	if((list_entry(list_begin(&ready_list),struct thread, elem)->priority)> (thread_current ()->priority)){
+		thread_yield();
+	}
 }
 
 /* Returns the current thread's priority. */
@@ -666,3 +662,5 @@ allocate_tid (void) {
 
 	return tid;
 }
+
+
