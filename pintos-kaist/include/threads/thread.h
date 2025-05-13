@@ -105,6 +105,7 @@ struct thread {
 #endif
 
 	int64_t wakeup_tick;
+	
 	/* Owned by thread.c. */
 	struct intr_frame tf;               /* Information for switching */
 	unsigned magic;                     /* Detects stack overflow. */

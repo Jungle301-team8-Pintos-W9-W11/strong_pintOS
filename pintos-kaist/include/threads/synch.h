@@ -37,6 +37,7 @@ void cond_init (struct condition *);
 void cond_wait (struct condition *, struct lock *);
 void cond_signal (struct condition *, struct lock *);
 void cond_broadcast (struct condition *, struct lock *);
+bool cmp_condvar_priority(struct list_elem *l, struct list_elem *s, void *aux);
 
 /* Optimization barrier.
  *

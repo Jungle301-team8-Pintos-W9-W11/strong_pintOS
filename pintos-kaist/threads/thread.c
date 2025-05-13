@@ -86,6 +86,9 @@ bool cmp_priority(struct list_elem *a, struct list_elem *b, void *aux UNUSED){
 	}
 };
 
+
+
+
 // Global descriptor table for the thread_start.
 // Because the gdt will be setup after the thread_init, we should
 // setup temporal gdt first.
