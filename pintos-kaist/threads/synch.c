@@ -281,6 +281,23 @@ void cond_init(struct condition *cond)
 	 interrupt handler.  This function may be called with
 	 interrupts disabled, but interrupts will be turned back on if
 	 we need to sleep. */
+
+// 인자로 받는 Elem이 thread가 아닌 semaphore
+bool cmp_condval_priority(struct list_elem *l, struct list_elem *s, void *aux UNUSED)
+{
+	// thread까지 어떻게 접근?
+	struct semaphore_elem *l_semaphore = list_entry(l, struct semaphore_elem, elem);
+	struct semaphore_elem *s_semaphore = list_entry(s, struct semaphore_elem, elem);
+
+	struct list *l_semaphore_waiters = &(l_semaphore->semaphore.waiters);
+	struct list *s_semaphore_waiters = &(s_semaphore->semaphore.waiters);
+
+	struct thread *l_thread = list_entry(list_begin(l_semaphore_waiters), struct thread, elem);
+	struct thread *s_thread = list_entry(list_begin(s_semaphore_waiters), struct thread, elem);
+
+	return l_thread->priority > s_thread->priority;
+}
+
 void cond_wait(struct condition *cond, struct lock *lock)
 {
 	struct semaphore_elem waiter;
@@ -291,7 +308,8 @@ void cond_wait(struct condition *cond, struct lock *lock)
 	ASSERT(lock_held_by_current_thread(lock));
 
 	sema_init(&waiter.semaphore, 0);
-	list_push_back(&cond->waiters, &waiter.elem);
+	// list_push_back(&cond->waiters, &waiter.elem);
+	list_insert_ordered(&cond->waiters, &waiter.elem, cmp_condval_priority, NULL);
 	lock_release(lock);
 	sema_down(&waiter.semaphore);
 	lock_acquire(lock);
@@ -312,9 +330,10 @@ void cond_signal(struct condition *cond, struct lock *lock UNUSED)
 	ASSERT(lock_held_by_current_thread(lock));
 
 	if (!list_empty(&cond->waiters))
-		sema_up(&list_entry(list_pop_front(&cond->waiters),
-												struct semaphore_elem, elem)
-								 ->semaphore);
+	{
+		list_sort(&cond->waiters, cmp_condval_priority, 0);
+		sema_up(&list_entry(list_pop_front(&cond->waiters), struct semaphore_elem, elem)->semaphore);
+	}
 }
 
 /* Wakes up all threads, if any, waiting on COND (protected by
