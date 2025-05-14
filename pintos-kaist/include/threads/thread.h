@@ -146,6 +146,8 @@ void thread_sleep(int64_t ticks);
 void thread_wakeup(int64_t ticks);
 
 bool cmp_priority(struct list_elem *l, struct list_elem *s, void *aux UNUSED);
+bool cmp_donate_priority(struct list_elem *l, struct list_elem *s, void *aux UNUSED);
+
 void recheck_readyQueue();
 
 int thread_get_priority(void);

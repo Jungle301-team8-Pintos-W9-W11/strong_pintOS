@@ -201,25 +201,49 @@ void lock_acquire(struct lock *lock)
 	ASSERT(lock != NULL);
 	ASSERT(!intr_context());
 	ASSERT(!lock_held_by_current_thread(lock));
+	struct thread *curr = thread_current();
 
 	// 1. 요구하는 Lock을 바로 쓸 수 있는가?
 	if (lock->holder)
 	{
 		struct thread *holder = lock->holder;
-		struct thread *curr = thread_current();
 		// 2. 없다면 => 지금 Lock을 가진 스레드의 donation 리스트에 저장
+		curr->wait_on_lock = lock;
 
 		list_insert_ordered(&holder->donations, &curr->d_elem, cmp_donate_priority, NULL);
 		// 2-2. Priority Donation -> CPU 점유중인 최우선 스레드의 우선순위를 Lock holder에게 주는 것
-		lock->holder->priority = curr->priority;
+		donate_priority();
+		// lock->holder->priority = curr->priority;
 		// 2-3. 우선순위가 올라간 Lock Holder-> CPU 점유하도록 curr 로 변경?
-		curr = lock->holder;
+		// curr = lock->holder;
 	}
 
 	sema_down(&lock->semaphore);
 	lock->holder = thread_current(); // LOCK을 최우선 순위의 curr 가 점유?
+	curr->wait_on_lock = NULL;
 }
+/*
+	Priority Donation
+*/
+void donate_priority(void)
+{
+	struct thread *curr = thread_current();
+	while (curr->wait_on_lock != NULL)
+	{
+		struct thread *holder = curr->wait_on_lock->holder;
 
+		// 현재 스레드(cur)의 우선순위가 홀더의 현재 우선순위보다 높을 때만 기증 및 연쇄 진행
+		if (curr->priority > holder->priority)
+		{
+			holder->priority = curr->priority; // 홀더의 우선순위를 높임
+			curr = holder;										 // 다음 홀더로 이동하여 연쇄적으로 기증 전파
+		}
+		else
+		{
+			break;
+		}
+	}
+}
 /* Tries to acquires LOCK and returns true if successful or false
 	 on failure.  The lock must not already be held by the current
 	 thread.
@@ -239,6 +263,28 @@ bool lock_try_acquire(struct lock *lock)
 	return success;
 }
 
+/*
+	lock을 사용하기 위해서 PRI 기부 한 스레드,
+	기부 이유 없어짐
+	donation 리스트에서 제거
+*/
+
+void remove_with_lock(struct lock *lock)
+{
+	struct list_elem *e;
+	struct thread *curr = thread_current();
+
+	// 반복문으로 리스트 순회, wait_on_lock이 이번에 해제되는 lock인 스레드들 모두 제거
+	for (e = list_begin(&curr->donations); e != list_end(&curr->donations); e = list_next(e))
+	{
+		struct thread *t = list_entry(e, struct thread, d_elem);
+		if (t->wait_on_lock == lock)
+		{
+			list_remove(&t->d_elem);
+		}
+	}
+}
+
 /* Releases LOCK, which must be owned by the current thread.
 	 This is lock_release function.
 
@@ -251,7 +297,9 @@ void lock_release(struct lock *lock)
 	ASSERT(lock_held_by_current_thread(lock));
 	struct thread *holder = lock->holder;
 
-	holder->priority = holder->origin_priority;
+	struct thread *releasing_thread = thread_current();
+	remove_with_lock(lock);
+	refresh_priority();
 
 	lock->holder = NULL;
 	sema_up(&lock->semaphore);

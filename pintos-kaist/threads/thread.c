@@ -422,11 +422,37 @@ void recheck_readyQueue()
 	}
 }
 
+void refresh_priority()
+{
+	struct thread *curr = thread_current();
+
+	// donation 리스트가 empty -> origin_PRI로 설정
+	if (list_empty(&curr->donations))
+	{
+		curr->priority = curr->origin_priority;
+	}
+	else
+	{
+		// donation 리스트가 존재 -> 남아있는 스레드 중 가장 높은 우선순위를 가져와야함
+		list_sort(&curr->donations, cmp_donate_priority, NULL); // 정렬 후 가장 맨 앞에 스레드 가져오기
+		struct thread *first_one = list_entry(list_front(&curr->donations), struct thread, d_elem);
+		if (first_one->priority > curr->priority)
+		{
+			// 맨 앞 스레드가 우선순위가 높다면 변동
+			curr->priority = first_one->priority;
+		}
+	}
+}
+
 /* Sets the current thread's priority to NEW_PRIORITY. */
 // priority Donate시 우선순위 setting?
 void thread_set_priority(int new_priority)
 {
-	thread_current()->priority = new_priority;
+	struct thread *curr = thread_current();
+	curr->origin_priority = new_priority; // 고유의 우선순위를 새롭게 설정하는 것!
+
+	// running 중인 thread의 변경 발생
+	refresh_priority();
 	// list_sort...?
 	list_sort(&ready_list, cmp_priority, NULL);
 	recheck_readyQueue();
