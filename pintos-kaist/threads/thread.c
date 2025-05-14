@@ -423,11 +423,10 @@ void recheck_readyQueue()
 }
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
+// priority Donate시 우선순위 setting?
 void thread_set_priority(int new_priority)
 {
 	thread_current()->priority = new_priority;
-	struct thread *first_elem = list_entry(list_begin(&ready_list), struct thread, elem);
-
 	// list_sort...?
 	list_sort(&ready_list, cmp_priority, NULL);
 	recheck_readyQueue();
@@ -531,6 +530,9 @@ init_thread(struct thread *t, const char *name, int priority)
 	t->tf.rsp = (uint64_t)t + PGSIZE - sizeof(void *);
 	t->priority = priority;
 	t->magic = THREAD_MAGIC;
+	t->origin_priority = priority;
+
+	list_init(&t->donations); // donation 리스트 시작
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should

@@ -179,7 +179,12 @@ void lock_init(struct lock *lock)
 	ASSERT(lock != NULL);
 
 	lock->holder = NULL;
-	sema_init(&lock->semaphore, 1);
+	sema_init(&lock->semaphore, 1); // 자원을 사용하기 위해 Lock을 Init, 1로 설정, 자원접근 가능
+}
+
+bool cmp_donate_priority(struct list_elem *l, struct list_elem *s, void *aux UNUSED)
+{
+	return list_entry(l, struct thread, d_elem)->priority > list_entry(s, struct thread, d_elem)->priority;
 }
 
 /* Acquires LOCK, sleeping until it becomes available if
@@ -192,12 +197,27 @@ void lock_init(struct lock *lock)
 	 we need to sleep. */
 void lock_acquire(struct lock *lock)
 {
+
 	ASSERT(lock != NULL);
 	ASSERT(!intr_context());
 	ASSERT(!lock_held_by_current_thread(lock));
 
+	// 1. 요구하는 Lock을 바로 쓸 수 있는가?
+	if (lock->holder)
+	{
+		struct thread *holder = lock->holder;
+		struct thread *curr = thread_current();
+		// 2. 없다면 => 지금 Lock을 가진 스레드의 donation 리스트에 저장
+
+		list_insert_ordered(&holder->donations, &curr->d_elem, cmp_donate_priority, NULL);
+		// 2-2. Priority Donation -> CPU 점유중인 최우선 스레드의 우선순위를 Lock holder에게 주는 것
+		lock->holder->priority = curr->priority;
+		// 2-3. 우선순위가 올라간 Lock Holder-> CPU 점유하도록 curr 로 변경?
+		curr = lock->holder;
+	}
+
 	sema_down(&lock->semaphore);
-	lock->holder = thread_current();
+	lock->holder = thread_current(); // LOCK을 최우선 순위의 curr 가 점유?
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -229,6 +249,9 @@ void lock_release(struct lock *lock)
 {
 	ASSERT(lock != NULL);
 	ASSERT(lock_held_by_current_thread(lock));
+	struct thread *holder = lock->holder;
+
+	holder->priority = holder->origin_priority;
 
 	lock->holder = NULL;
 	sema_up(&lock->semaphore);
