@@ -216,7 +216,6 @@ tid_t thread_create(const char *name, int priority,
 	t->tf.eflags = FLAG_IF;
 
 	/* Add to run queue. */
-	// thread_unblock(t); // 여기서 비교랑 다 하는데?
 	/* compare the priorities of the currently running thread and the newly inserted one.
 	Yield the CPU if the newly arriving thread has higher priority*/
 
@@ -424,24 +423,39 @@ void recheck_readyQueue()
 
 void refresh_priority()
 {
-	struct thread *curr = thread_current();
+	// struct thread *curr = thread_current();
 
-	// donation 리스트가 empty -> origin_PRI로 설정
-	if (list_empty(&curr->donations))
+	// // donation 리스트가 empty -> origin_PRI로 설정
+	// if (list_empty(&curr->donations))
+	// {
+	// 	curr->priority = curr->origin_priority;
+	// }
+	// else
+	// {
+	// 	// donation 리스트가 존재 -> 남아있는 스레드 중 가장 높은 우선순위를 가져와야함
+	// 	list_sort(&curr->donations, cmp_donate_priority, NULL); // 정렬 후 가장 맨 앞에 스레드 가져오기
+	// 	struct thread *first_one = list_entry(list_front(&curr->donations), struct thread, d_elem);
+	// 	if (first_one->priority > curr->priority)
+	// 	{
+	// 		// 맨 앞 스레드가 우선순위가 높다면 변동
+	// 		curr->priority = first_one->priority;
+	// 	}
+	// }
+
+	struct thread *curr = thread_current();
+	int new_calculated_priority = curr->origin_priority; // 계산을 위한 임시 변수, 기본값은 원래 우선순위
+
+	if (!list_empty(&curr->donations))
 	{
-		curr->priority = curr->origin_priority;
-	}
-	else
-	{
-		// donation 리스트가 존재 -> 남아있는 스레드 중 가장 높은 우선순위를 가져와야함
-		list_sort(&curr->donations, cmp_donate_priority, NULL); // 정렬 후 가장 맨 앞에 스레드 가져오기
-		struct thread *first_one = list_entry(list_front(&curr->donations), struct thread, d_elem);
-		if (first_one->priority > curr->priority)
+		list_sort(&curr->donations, cmp_donate_priority, NULL);
+		struct thread *highest_donor = list_entry(list_front(&curr->donations), struct thread, d_elem);
+
+		if (highest_donor->priority > new_calculated_priority)
 		{
-			// 맨 앞 스레드가 우선순위가 높다면 변동
-			curr->priority = first_one->priority;
+			new_calculated_priority = highest_donor->priority;
 		}
 	}
+	curr->priority = new_calculated_priority; // 최종 계산된 우선순위를 반영
 }
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
@@ -449,6 +463,7 @@ void refresh_priority()
 void thread_set_priority(int new_priority)
 {
 	struct thread *curr = thread_current();
+
 	curr->origin_priority = new_priority; // 고유의 우선순위를 새롭게 설정하는 것!
 
 	// running 중인 thread의 변경 발생
