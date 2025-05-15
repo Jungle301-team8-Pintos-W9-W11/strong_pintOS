@@ -14,6 +14,12 @@
 *.dis
 *.dump
 
+# 테스트 파일 결과
+*.output
+*.error
+*.result
+
+
 # 빌드 디렉터리
 /build/
 /bin/
