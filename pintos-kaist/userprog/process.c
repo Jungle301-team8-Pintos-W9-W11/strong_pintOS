@@ -33,11 +33,12 @@ process_init (void) {
 	struct thread *current = thread_current ();
 }
 
-/* Starts the first userland program, called "initd", loaded from FILE_NAME.
- * The new thread may be scheduled (and may even exit)
- * before process_create_initd() returns. Returns the initd's
- * thread id, or TID_ERROR if the thread cannot be created.
- * Notice that THIS SHOULD BE CALLED ONCE. */
+/* 첫 번째 유저랜드 프로그램인 "initd"를 FILE_NAME에서 로드하여 실행을 시작합니다.
+ * 새로 생성된 스레드는 process_create_initd() 함수가 반환되기 전에 
+ * 스케줄링되어 실행되거나 심지어 종료될 수도 있습니다.
+ * 함수는 initd 스레드의 ID를 반환하며, 스레드 생성에 실패한 경우에는 TID_ERROR를 반환합니다.
+ * 주의: 이 함수는 반드시 한 번만 호출되어야 합니다. */
+
 tid_t
 process_create_initd (const char *file_name) {
 	char *fn_copy;
@@ -161,31 +162,104 @@ error:
 /* Switch the current execution context to the f_name.
  * Returns -1 on fail. */
 int
-process_exec (void *f_name) {
+process_exec (void *f_name) { //실행하려는 바이너리 파일의 이름?
 	char *file_name = f_name;
 	bool success;
 
-	/* We cannot use the intr_frame in the thread structure.
-	 * This is because when current thread rescheduled,
-	 * it stores the execution information to the member. */
+	/* 현재 실행 컨텍스트를 f_name으로 전환한다.
+	 * 이는 현재 스레드가 다시 스케줄될 때 발생하기 때문이다,
+	 * 실행 정보를 해당 멤버 변수에 저장하기 때문이다.. */
 	struct intr_frame _if;
-	_if.ds = _if.es = _if.ss = SEL_UDSEG;
-	_if.cs = SEL_UCSEG;
+	_if.ds = _if.es = _if.ss = SEL_UDSEG;	//유저 데이터 세그먼트?
+	_if.cs = SEL_UCSEG;						//유저 코드 세그먼트
 	_if.eflags = FLAG_IF | FLAG_MBS;
 
-	/* We first kill the current context */
+	/* 먼저 현재 컨텍스트를 종료(kill)한다. */
 	process_cleanup ();
 
-	/* And then load the binary */
+	/* 그 다음에 바이너리를 로드한다. */
+	char *token;
+	char *strl;
+	token = strtok_r (file_name, " ", &strl);
+
+
+
 	success = load (file_name, &_if);
 
-	/* If load failed, quit. */
+
+//////////////////////문자열 스택으로 
+	char *argv[99];
+	int argc = 0;
+	while (token != NULL) {
+		argv[argc] = token;
+		argc++;
+		token = strtok_r(NULL, " ", &strl);  // 다음 호출
+	}
+	argv[argc] = NULL;
+	_if.R.rdi = argc + 1;   // USER_STACK
+    
+
+    char *str[99];
+
+    for(int i = 0; i < argc; i++){
+		uintptr_t b = strlen(argv[i])+1;
+		_if.rsp = _if.rsp - b;
+       	str[i] = _if.rsp;
+		memcpy(str[i], argv[i], b);
+	   //rsp 갱신이 필요
+	}
+
+
+    //패딩 정리하기
+	//값을 넣어줘야 하는지 모르겠음
+    //패딩처리 구문~
+    uintptr_t num = _if.rsp;
+    _if.rsp = _if.rsp & ~0x7;
+   	uint8_t check_num = num - (_if.rsp);
+   	memset(_if.rsp, 0 , check_num);
+    // *( uint8_t*)if_->rsp = 0; 확실하지않음
+
+	//0x4747ffe0	argv[4]	0	char *
+    //확실치않음
+    _if.rsp = _if.rsp - 0x8;
+	memset((char *)_if.rsp, 0 , 8);
+
+	// strlcpy(_if.rsp, '0', 8);
+	// *(char *)_if.rsp = 0;
+    
+	char **str2;
+    for(int i = argc-1; i >= 0; i--){
+		_if.rsp = _if.rsp - 0x8;
+        str2 = _if.rsp;
+		memcpy(str2, &str[i], 8);
+	}
+
+	_if.R.rsi = (uint64_t)_if.rsp;
+
+
+    _if.rsp = _if.rsp - 0x8;
+	memset((char *)_if.rsp, 0 , 8);
+	// *(char *) _if.rsp = 0;
+
+    // _if.R.rsi = &argv[0];
+     
+
+
+	 /*/* BUF의 SIZE 바이트를 16바이트씩 한 줄로 묶어 16진수 형식으로 콘솔에 출력합니다.
+   각 줄에는 숫자 오프셋이 포함되며, BUF의 첫 바이트를 기준으로 OFS에서 시작합니다.
+   ASCII가 true일 경우, 해당하는 ASCII 문자도 함께 출력됩니다. */
+// void
+// hex_dump (uintptr_t ofs, const void *buf_, size_t size, bool ascii) {*/
+  
+	hex_dump(_if.rsp, _if.rsp , USER_STACK - _if.rsp , true);
+
+	/* 불로오기를 실패하면 프로그램을 종료한다. */
 	palloc_free_page (file_name);
 	if (!success)
 		return -1;
 
-	/* Start switched process. */
-	do_iret (&_if);
+	/* 전환된 프로세스를 시작한다.. */
+	do_iret (&_if); //실행할 레지스터를 잘 지정해야 한다?
 	NOT_REACHED ();
 }
 
@@ -204,6 +278,9 @@ process_wait (tid_t child_tid UNUSED) {
 	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
 	 * XXX:       to add infinite loop here before
 	 * XXX:       implementing the process_wait. */
+	while(1){
+
+	}
 	return -1;
 }
 
@@ -215,7 +292,7 @@ process_exit (void) {
 	 * TODO: Implement process termination message (see
 	 * TODO: project2/process_termination.html).
 	 * TODO: We recommend you to implement process resource cleanup here. */
-
+	
 	process_cleanup ();
 }
 
@@ -320,6 +397,12 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
  * Stores the executable's entry point into *RIP
  * and its initial stack pointer into *RSP.
  * Returns true if successful, false otherwise. */
+/*
+ *이 함수는 주어진 ELF 실행 파일을 현재 스레드에 로드하고,
+ *프로그램의 시작 주소를 *RIP에,
+ *초기 스택 포인터를 *RSP에 저장하며,
+ *성공 여부를 true 또는 false로 반환하는 함수입니다.
+*/
 static bool
 load (const char *file_name, struct intr_frame *if_) {
 	struct thread *t = thread_current ();
@@ -416,6 +499,60 @@ load (const char *file_name, struct intr_frame *if_) {
 
 	/* TODO: Your code goes here.
 	 * TODO: Implement argument passing (see project2/argument_passing.html). */
+	
+
+
+	/////////////////////////////////////////////////////////////////////////////////////////////////
+	/* 시작 주소 (Entry point). */
+	//사용자 프로그램의 시작점 main()함수가 위치한 곳.
+    
+	// char *token;
+	// char *saveptr;
+	// char *argv;
+	// int argc = 0;
+	// token = strtok_r(file_name, " ", &saveptr);  // 첫 번째 호출
+	// while (token != NULL) {
+	// 	argv[argc] = token;
+	// 	argc++;
+	// 	token = strtok_r(NULL, " ", &saveptr);  // 다음 호출
+	// }
+	// argv[argc] = NULL;
+	// if_->R.rdi = argc; 
+
+     
+
+    // // USER_STACK
+    
+	// char *str[99];
+
+    // for(int i =0; i<argc; i++){
+ 
+  	//    if_->rsp = if_->rsp - (strlen(argv[i])+1);
+	//    str[i] = if_->rsp;
+	//    *str[i] = argv[i];
+
+	// }
+
+	// uintptr_t check_num = (if_->rsp) - ((if_->rsp) & ~0x7);
+	// if_->rsp = if_->rsp & ~0x7; // 패딩
+	// memset(if_->rsp, 0, check_num); // 패딩에 0 넣어야함
+
+
+	// if_->rsp -= 0x8;
+	// *(char *)if_->rsp = 0;
+	
+	// char *str2;
+	// for(int i = argc - 1; i >= 0 ; i--){
+	// 	if_->rsp = if_->rsp - 0x8;
+	// 	str2 = if_->rsp;
+	// 	*str2 = str[i];
+	// }
+
+	// if_->rsp = if_->rsp - 0x8;
+	// *(char *)if_->rsp = 0;
+	// if_->R.rsi = &argv[0];
+
+	////////////////////////////////////////////////////////////////////////////////////	
 
 	success = true;
 

@@ -74,8 +74,8 @@ main (void) {
 	bss_init ();
 
 	/* Break command line into arguments and parse options. */
-	argv = read_command_line ();
-	argv = parse_options (argv);
+	argv = read_command_line (); // 받은거 그대로 자르기
+	argv = parse_options (argv); // 자른거 -로 시작하는 문자열 처리, argv중 명령어 아닌 부분만 넘김
 
 	/* Initialize ourselves as a thread so we can use locks,
 	   then enable console locking. */
@@ -130,12 +130,12 @@ main (void) {
 /* Clear BSS */
 static void
 bss_init (void) {
-	/* The "BSS" is a segment that should be initialized to zeros.
-	   It isn't actually stored on disk or zeroed by the kernel
-	   loader, so we have to zero it ourselves.
+/* "BSS"는 0으로 초기화되어야 하는 메모리 영역(segment)입니다.
+   이 영역은 실제로 디스크에 저장되거나 커널 로더가 0으로 초기화해주는 것이 아니기 때문에,
+   우리가 직접 0으로 초기화해주어야 합니다.
 
-	   The start and end of the BSS segment is recorded by the
-	   linker as _start_bss and _end_bss.  See kernel.lds. */
+   BSS 영역의 시작과 끝 주소는 링커가 _start_bss 와 _end_bss 라는 심볼로 기록해둡니다.
+   자세한 내용은 kernel.lds 파일을 참고하세요. */
 	extern char _start_bss, _end_bss;
 	memset (&_start_bss, 0, &_end_bss - &_start_bss);
 }
@@ -237,7 +237,7 @@ parse_options (char **argv) {
 /* Runs the task specified in ARGV[1]. */
 static void
 run_task (char **argv) {
-	const char *task = argv[1];
+	const char *task = argv[1]; // 파일명
 
 	printf ("Executing '%s':\n", task);
 #ifdef USERPROG

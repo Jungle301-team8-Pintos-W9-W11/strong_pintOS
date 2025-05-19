@@ -182,39 +182,35 @@ strstr (const char *haystack, const char *needle) {
 	return NULL;
 }
 
-/* Breaks a string into tokens separated by DELIMITERS.  The
-   first time this function is called, S should be the string to
-   tokenize, and in subsequent calls it must be a null pointer.
-   SAVE_PTR is the address of a `char *' variable used to keep
-   track of the tokenizer's position.  The return value each time
-   is the next token in the string, or a null pointer if no
-   tokens remain.
+/* 문자열을 DELIMITERS(구분자)로 나누어 토큰으로 분리합니다.
+   이 함수를 처음 호출할 때는 S에 나눌 문자열을 전달해야 하며,
+   이후 호출에서는 NULL을 전달해야 합니다.
+   SAVE_PTR는 `char *` 변수의 주소이며, 토큰화를 진행하는 동안 현재 위치를 저장하는 데 사용됩니다.
+   반환값은 매번 문자열에서 다음 토큰이며, 더 이상 토큰이 없으면 NULL을 반환합니다.
 
-   This function treats multiple adjacent delimiters as a single
-   delimiter.  The returned tokens will never be length 0.
-   DELIMITERS may change from one call to the next within a
-   single string.
+   이 함수는 연속된 구분자들을 하나의 구분자로 처리합니다.
+   반환된 토큰은 절대 길이가 0이 될 수 없습니다.
+   DELIMITERS는 같은 문자열을 처리하는 중간에도 매 호출마다 변경될 수 있습니다.
 
-   strtok_r() modifies the string S, changing delimiters to null
-   bytes.  Thus, S must be a modifiable string.  String literals,
-   in particular, are *not* modifiable in C, even though for
-   backward compatibility they are not `const'.
+   strtok_r()는 문자열 S를 직접 수정하며, 구분자 자리를 널 바이트(null byte)('\0')로 바꿉니다.
+   따라서 S는 수정 가능한 문자열이어야 합니다. 특히 문자열 리터럴은 C에서 수정할 수 없으므로
+   전달하면 안 됩니다. (비록 오래된 문법 호환성을 위해 const로 선언되지 않더라도 말이죠.)
 
-   Example usage:
+   예시 사용법:
 
    char s[] = "  String to  tokenize. ";
    char *token, *save_ptr;
 
-   for (token = strtok_r (s, " ", &save_ptr); token != NULL;
-   token = strtok_r (NULL, " ", &save_ptr))
-   printf ("'%s'\n", token);
+   for (token = strtok_r(s, " ", &save_ptr); token != NULL; token = strtok_r(NULL, " ", &save_ptr))
+    	printf ("'%s'\n", token);
 
-outputs:
+   출력 결과:
 
-'String'
-'to'
-'tokenize.'
+   'String'
+   'to'
+   'tokenize.'
 */
+
 char *
 strtok_r (char *s, const char *delimiters, char **save_ptr) {
 	char *token;
