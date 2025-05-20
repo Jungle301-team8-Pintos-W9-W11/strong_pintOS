@@ -333,17 +333,20 @@ void thread_exit(void)
 	 may be scheduled again immediately at the scheduler's whim. */
 void thread_yield(void)
 {
-	struct thread *curr = thread_current();
-	enum intr_level old_level;
+	if (thread_current() != idle_thread)
+	{
+		struct thread *curr = thread_current();
+		enum intr_level old_level;
 
-	ASSERT(!intr_context());
+		ASSERT(!intr_context());
 
-	old_level = intr_disable();
-	if (curr != idle_thread)
-		// ready list에 정렬된 상태로 push
-		list_insert_ordered(&ready_list, &curr->elem, cmp_priority, NULL);
-	do_schedule(THREAD_READY);
-	intr_set_level(old_level);
+		old_level = intr_disable();
+		if (curr != idle_thread)
+			// ready list에 정렬된 상태로 push
+			list_insert_ordered(&ready_list, &curr->elem, cmp_priority, NULL);
+		do_schedule(THREAD_READY);
+		intr_set_level(old_level);
+	}
 }
 
 // ✅ 현재 저장된 글로벌 tick 가져오기(getter)
