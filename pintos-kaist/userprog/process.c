@@ -51,6 +51,9 @@ process_create_initd (const char *file_name) {
 		return TID_ERROR;
 	strlcpy (fn_copy, file_name, PGSIZE);
 
+	char *save_ptr;
+	strtok_r(file_name, " ", &save_ptr);
+
 	/* Create a new thread to execute FILE_NAME. */
 	tid = thread_create (file_name, PRI_DEFAULT, initd, fn_copy);
 	if (tid == TID_ERROR)
@@ -182,8 +185,6 @@ process_exec (void *f_name) { //실행하려는 바이너리 파일의 이름?
 	char *strl;
 	token = strtok_r (file_name, " ", &strl);
 
-
-
 	success = load (file_name, &_if);
 
 
@@ -196,7 +197,7 @@ process_exec (void *f_name) { //실행하려는 바이너리 파일의 이름?
 		token = strtok_r(NULL, " ", &strl);  // 다음 호출
 	}
 	argv[argc] = NULL;
-	_if.R.rdi = argc + 1;   // USER_STACK
+	_if.R.rdi = argc;   // USER_STACK
     
 
     char *str[99];
@@ -253,7 +254,7 @@ process_exec (void *f_name) { //실행하려는 바이너리 파일의 이름?
   
 	hex_dump(_if.rsp, _if.rsp , USER_STACK - _if.rsp , true);
 
-	/* 불로오기를 실패하면 프로그램을 종료한다. */
+	/* 불러오기를 실패하면 프로그램을 종료한다. */
 	palloc_free_page (file_name);
 	if (!success)
 		return -1;
@@ -278,7 +279,7 @@ process_wait (tid_t child_tid UNUSED) {
 	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
 	 * XXX:       to add infinite loop here before
 	 * XXX:       implementing the process_wait. */
-	while(1){
+	for(int i=0; i < 1000000000; i++){
 
 	}
 	return -1;
@@ -292,7 +293,7 @@ process_exit (void) {
 	 * TODO: Implement process termination message (see
 	 * TODO: project2/process_termination.html).
 	 * TODO: We recommend you to implement process resource cleanup here. */
-	
+
 	process_cleanup ();
 }
 

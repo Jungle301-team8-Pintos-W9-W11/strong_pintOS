@@ -30,6 +30,7 @@
         "stdexcept": "c",
         "system_error": "c",
         "typeinfo": "c",
-        "utility": "c"
+        "utility": "c",
+        "interrupt.h": "c"
     }
 }
