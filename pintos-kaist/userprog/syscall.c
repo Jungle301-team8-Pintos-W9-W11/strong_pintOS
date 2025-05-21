@@ -70,6 +70,7 @@ syscall_handler (struct intr_frame *f UNUSED) {
 			break;
 		case 7:
 			// OPEN
+			f->R.rax = open(f->R.rdi);
 			break;
 		case 8:
 			// FILESIZE
@@ -159,19 +160,36 @@ int wait (pid_t pid){ // !
 }
 
 bool create (const char *file, unsigned initial_size){
+	if(file == NULL) exit(-1);
 	return filesys_create(*file, initial_size);
 }
 
 bool remove (const char *file){
-
+	return filesys_remove(file);
 }
 
 int open (const char *file){
+	
+	struct file* file_1 = filesys_open(file);
+	struct thread *curr = thread_current();
 
+	if(file_1 == NULL){
+		return -1;
+	}
+	else{
+		for(int i = 2; i < 64; i++){
+			if(curr->fdt[i] == NULL){
+				// 넣어주고
+				curr->fdt[i] = file_1;
+				return i;
+			}
+
+		}
+	}
 }
 
 int filesize (int fd){
-	return file_length(fd);
+	return file_length(fd); //
 }
 
 int read (int fd, void *buffer, unsigned size){
@@ -187,15 +205,40 @@ int write(int fd, const void *buffer, unsigned size){
 }	
 
 void seek (int fd, unsigned position){
-	
+	if( fd<2 || fd>63 ){ // fd 안되는 거
+		exit(-1);
+	}
+	struct thread *curr = thread_current();
+	struct file *file = curr->fdt[fd];
+	if(file == NULL) {
+		exit(-1);
+	}
+	file_seek(file, position);
+
 }
 
 unsigned tell (int fd){
-
+	if( fd<2 || fd>63 ){ // fd 안되는 거
+		exit(-1);
+	}
+	struct thread *curr = thread_current();
+	struct file *file = curr->fdt[fd];
+	if(file == NULL) {
+		exit(-1);
+	}
+	file_tell(file);
 }
 
 void close (int fd){
-
+	if( fd<2 || fd>63 ){ // fd 안되는 거
+		exit(-1);
+	}
+	struct thread *curr = thread_current();
+	struct file *file = curr->fdt[fd];
+	if(file == NULL) {
+		exit(-1);
+	}
+	file_close(file);
 }
 
 int dup2(int oldfd, int newfd){

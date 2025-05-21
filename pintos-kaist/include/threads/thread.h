@@ -102,6 +102,9 @@ struct thread
 	struct list_elem elem;	 /* List element. */
 	struct list_elem d_elem; /* donation List 요소*/
 
+	// int64_t fd;
+	struct file *fdt[64];
+
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4; /* Page map level 4 */

@@ -19,8 +19,8 @@ Executing 'lg-seq-block':
 (lg-seq-block) write 513 bytes at offset 0 in "noodle" failed: FAILED
 lg-seq-block: exit(1)
 Execution of 'lg-seq-block' complete.
-Timer: 695 ticks
-Thread: 36 idle ticks, 655 kernel ticks, 4 user ticks
+Timer: 600 ticks
+Thread: 34 idle ticks, 558 kernel ticks, 9 user ticks
 hd0:0: 0 reads, 0 writes
 hd0:1: 81 reads, 242 writes
 hd1:0: 107 reads, 0 writes

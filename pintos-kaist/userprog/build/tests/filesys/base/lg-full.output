@@ -19,8 +19,8 @@ Executing 'lg-full':
 (lg-full) write 75678 bytes at offset 0 in "quux" failed: FAILED
 lg-full: exit(1)
 Execution of 'lg-full' complete.
-Timer: 682 ticks
-Thread: 33 idle ticks, 646 kernel ticks, 4 user ticks
+Timer: 609 ticks
+Thread: 31 idle ticks, 573 kernel ticks, 6 user ticks
 hd0:0: 0 reads, 0 writes
 hd0:1: 81 reads, 242 writes
 hd1:0: 107 reads, 0 writes

@@ -19,8 +19,8 @@ Executing 'wait-twice':
 (wait-twice) end
 wait-twice: exit(0)
 Execution of 'wait-twice' complete.
-Timer: 706 ticks
-Thread: 36 idle ticks, 667 kernel ticks, 4 user ticks
+Timer: 581 ticks
+Thread: 36 idle ticks, 544 kernel ticks, 2 user ticks
 hd0:0: 0 reads, 0 writes
 hd0:1: 107 reads, 446 writes
 hd1:0: 204 reads, 0 writes

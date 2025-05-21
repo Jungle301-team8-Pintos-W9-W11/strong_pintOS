@@ -252,7 +252,7 @@ process_exec (void *f_name) { //실행하려는 바이너리 파일의 이름?
 // void
 // hex_dump (uintptr_t ofs, const void *buf_, size_t size, bool ascii) {*/
   
-	hex_dump(_if.rsp, _if.rsp , USER_STACK - _if.rsp , true);
+	// hex_dump(_if.rsp, _if.rsp , USER_STACK - _if.rsp , true);
 
 	/* 불러오기를 실패하면 프로그램을 종료한다. */
 	palloc_free_page (file_name);

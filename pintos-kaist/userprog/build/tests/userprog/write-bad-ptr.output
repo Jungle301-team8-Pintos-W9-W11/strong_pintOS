@@ -18,8 +18,8 @@ Executing 'write-bad-ptr':
 (write-bad-ptr) should have exited with -1: FAILED
 write-bad-ptr: exit(1)
 Execution of 'write-bad-ptr' complete.
-Timer: 642 ticks
-Thread: 34 idle ticks, 606 kernel ticks, 2 user ticks
+Timer: 575 ticks
+Thread: 32 idle ticks, 541 kernel ticks, 2 user ticks
 hd0:0: 0 reads, 0 writes
 hd0:1: 107 reads, 248 writes
 hd1:0: 105 reads, 0 writes

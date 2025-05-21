@@ -13,16 +13,24 @@ Boot complete.
 Putting 'open-bad-ptr' into the file system...
 Executing 'open-bad-ptr':
 (open-bad-ptr) begin
-(open-bad-ptr) open(0x20101234): 7
-(open-bad-ptr) should have called exit(-1): FAILED
-open-bad-ptr: exit(1)
-Execution of 'open-bad-ptr' complete.
-Timer: 639 ticks
-Thread: 35 idle ticks, 602 kernel ticks, 3 user ticks
+Page fault at 0x20101234: not present error reading page in kernel context.
+Interrupt 0x0e (#PF Page-Fault Exception) at rip=8004217068
+ cr2=0000000020101234 error=               0
+rax 0000000020101234 rbx 0000000000000000 rcx 000000000000003e rdx 000000800423fe38
+rsp 000000800423fde0 rbp 000000800423fe00 rsi 000000800423fe38 rdi 0000000020101234
+rip 0000008004217068 r8 0000000000000000  r9 0000000000000000 r10 0000000000000000
+r11 0000000000000212 r12 000000800421c868 r13 0000000000000000 r14 0000000000000000
+r15 0000000000000000 rflags 00000202
+es: 001b ds: 001b cs: 0008 ss: 0010
+Kernel PANIC at ../../userprog/exception.c:97 in kill(): Kernel bug - unexpected interrupt in kernel
+Call stack: 0x8004217d9c 0x800421c5b3 0x800421c732 0x8004208cde 0x80042090fc 0x800421e69b 0x800421e7d5 0x800421d14b 0x800421ca64 0x800421c8e0 0x800421c7a7 0x4000fd 0x400190 0x400c31.
+The `backtrace' program can make call stacks useful.
+Read "Backtraces" in the "Debugging Tools" chapter
+of the Pintos documentation for more information.
+Timer: 278 ticks
+Thread: 33 idle ticks, 237 kernel ticks, 8 user ticks
 hd0:0: 0 reads, 0 writes
-hd0:1: 80 reads, 234 writes
+hd0:1: 82 reads, 234 writes
 hd1:0: 103 reads, 0 writes
-Console: 933 characters output
-Keyboard: 0 keys pressed
-Exception: 0 page faults
-Powering off...
+Console: 1814 characters output
+Key
