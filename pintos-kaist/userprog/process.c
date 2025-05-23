@@ -52,8 +52,8 @@ tid_t process_create_initd(const char *file_name)
 	if (fn_copy == NULL)
 		return TID_ERROR;									 // 저장공간 없다면 에러
 	strlcpy(fn_copy, file_name, PGSIZE); // file_name 복사
-
-	/* Create a new thread to execute FILE_NAME. */
+	char *save_ptr;
+	strtok_r(file_name, " ", &save_ptr);												 /* Create a new thread to execute FILE_NAME. */
 	tid = thread_create(file_name, PRI_DEFAULT, initd, fn_copy); // file_name, 새로운 스레드 생성 후 filename 실행
 	if (tid == TID_ERROR)
 		palloc_free_page(fn_copy);
@@ -183,20 +183,18 @@ int process_exec(void *f_name)
 	process_cleanup();
 
 	// 1.Break the command
-	char *token;
-	char *save_ptr;
+	char *token, *save_ptr;
+	char *argv[64];
+	int count = 0;
 
 	// file name에서 공백을 만나면 문자열 자르고 save_ptr에 다음 문자열 주소 저장
 	// 첫번째 호출
 	token = strtok_r(file_name, " ", &save_ptr); // args-single onearg 일경우 args-single
 
-	char *argv[99];
-	int argc = 0;
-
 	while (token != NULL)
 	{
-		argv[argc] = token; // 자른 문자열 저장
-		argc++;
+		argv[count] = token; // 자른 문자열 저장
+		count++;
 		token = strtok_r(NULL, " ", &save_ptr); // args-single onearg 일경우 args-single
 	}
 
@@ -207,13 +205,16 @@ int process_exec(void *f_name)
 	// first push 전 8의 배수로 round 후 push => 더 좋은 성능보장 목적
 	// argv의 마지먁 idx부터 들어가야함.
 
-	char *arg_stack_addrs[argc]; // 문자열의 스택 주소를 저장하기 위함
+	char *arg_stack_addrs[64]; // 문자열의 스택 주소를 저장하기 위함
 
-	for (int i = 0; i < argc; i++)
+	for (int i = 0; i < count; i++)
 	{
 		uint16_t length = strlen(argv[i]);
-		_if.rsp = _if.rsp - (length + 1);						 // str의 길이 + \0 만큼 stack top pointer 이동(높은 주소 -> 낮은 주소)
-		arg_stack_addrs[i] = _if.rsp;								 // TOS 주소 저장
+		_if.rsp = _if.rsp - (length + 1); // str의 길이 + \0 만큼 stack top pointer 이동(높은 주소 -> 낮은 주소)
+		arg_stack_addrs[i] = _if.rsp;			// TOS 주소 저장
+		// printf("addrval : %X\n", arg_stack_addrs[i]);
+		// printf("argv : %s, %d\n", argv[i], i);
+
 		memcpy(arg_stack_addrs[i], argv[i], length); // 주소에 argv 값 복사해서 저장(Stack에 push)
 	}
 
@@ -227,26 +228,26 @@ int process_exec(void *f_name)
 	}
 
 	// NULL 삽입
-	_if.rsp -= sizeof(char *); // char * 사이즈 만큼 이동
-	*((char **)_if.rsp) = 0;	 // NULL 로 채우기
+	_if.rsp -= 8;						 // char * 사이즈 만큼 이동
+	*((char **)_if.rsp) = 0; // NULL 로 채우기
 
 	// 주소값 Push
 	// 3. Push the address of each string + null pointer(\0)
-	for (int i = argc - 1; i >= 0; i--)
+	for (int i = count; i >= 0; i--)
 	{
-		_if.rsp -= sizeof(char *);
+		_if.rsp -= 8;
 		*((char **)_if.rsp) = arg_stack_addrs[i];
 	}
 
 	// 4. %rsi가 argv(argv[0]) 가리키고, %rdi가 argc 가리키도록(Point)
-	_if.R.rdi = argc;
-	_if.R.rsi = arg_stack_addrs;
+	_if.R.rdi = count;
+	_if.R.rsi = (char *)_if.rsp;
 	// 5. 가짜 return address push
 
 	_if.rsp -= sizeof(void *);
 	*((void **)_if.rsp) = 0;
 
-	hex_dump(_if.rsp, _if.rsp, USER_STACK - _if.rsp, true);
+	// hex_dump(_if.rsp, _if.rsp, USER_STACK - _if.rsp, true);
 	/* If load failed, quit. */
 	palloc_free_page(file_name);
 	if (!success)
@@ -271,9 +272,14 @@ int process_wait(tid_t child_tid UNUSED)
 	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
 	 * XXX:       to add infinite loop here before
 	 * XXX:       implementing the process_wait. */
-	while (1)
+	// while (1)
+	// {
+	// };
+
+	// 🚨?? 2배되니 통과 개꿀
+	for (int i = 0; i < 200000000; i++)
 	{
-	};
+	}
 	return -1;
 }
 

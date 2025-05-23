@@ -576,6 +576,11 @@ init_thread(struct thread *t, const char *name, int priority)
 	t->magic = THREAD_MAGIC;
 	t->origin_priority = priority;
 
+	for (int i = 0; i < 64; i++)
+	{
+		t->fdt[i] = NULL;
+	}
+
 	list_init(&t->donations); // donation 리스트 시작
 }
 

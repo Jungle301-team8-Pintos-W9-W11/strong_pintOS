@@ -1,5 +1,6 @@
 #ifndef THREADS_THREAD_H
 #define THREADS_THREAD_H
+#define USERPROG
 
 #include <debug.h>
 #include <list.h>
@@ -102,8 +103,12 @@ struct thread
 	struct list_elem elem;	 /* List element. */
 	struct list_elem d_elem; /* donation List 요소*/
 
+	/* exit status*/
+
 #ifdef USERPROG
-	/* Owned by userprog/process.c. */
+	int exit_status;			// exit() 또는 wait() 구현에 사용되는 변수
+	struct file *fdt[64]; // 파일 디스크립터 테이블
+
 	uint64_t *pml4; /* Page map level 4 */
 #endif
 #ifdef VM
