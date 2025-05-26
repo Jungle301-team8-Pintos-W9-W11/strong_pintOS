@@ -93,12 +93,14 @@ timer_sleep (int64_t ticks) {
 	int64_t start = timer_ticks ();
 
 	ASSERT (intr_get_level () == INTR_ON);
+
 	// while (timer_elapsed (start) < ticks)
 	// 	thread_yield ();
 
 	// ✅
-	if(timer_elapsed(start)<ticks)
-		thread_sleep(start+ticks);
+	if(timer_elapsed(start)<ticks)	// 만약 아직 기다려야 할 시간이 남아 있다면
+		thread_sleep(start+ticks);	// 현재 시간 + 대기 시간 = 깨어날 시각으로 설정해서 잠자기
+									// thread_sleep()은 현재 스레드를 BLOCK 상태로 만든다.
 }
 
 /* Suspends execution for approximately MS milliseconds. */
@@ -132,8 +134,11 @@ timer_interrupt (struct intr_frame *args UNUSED) {
 	thread_tick ();
 
 	// ✅
+	// 현재 시간(ticks)이 깨어나야 할 최소 시간(global_ticks) 이상이면
+	// sleep_list에 잠들어 있는 스레드 중, 깨울 시간이 된 스레드들을 깨운다.
 	if(get_global_ticks() <= ticks){
-		thread_awake(ticks);
+		thread_awake(ticks);  
+		// sleep_list 순회하며 깨울 시간이 된 스레드를 READY 상태로 만든다.
 	}
 }
 

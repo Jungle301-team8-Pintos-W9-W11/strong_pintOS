@@ -220,6 +220,20 @@ thread_create (const char *name, int priority,
 	init_thread (t, name, priority);
 	tid = t->tid = allocate_tid ();
 
+	// ✅ System Call
+	t->fdt = palloc_get_multiple(PAL_ZERO, FDT_PAGES);
+	if (t->fdt == NULL) {
+		return TID_ERROR;
+	}
+	t->next_fd = 2; // 0 : stdin, 1 : stdout
+	t->fdt[0] = 1; // STDIN_FILENO -> dummy value
+	t->fdt[1] = 2; // STDOUT_FILENO -> dummy value
+
+	// ✅ System Call
+    struct thread *curr = thread_current();
+    list_push_back(&curr->child_list,&t->child_elem);
+
+
 	/* Call the kernel_thread if it scheduled.
 	 * Note) rdi is 1st argument, and rsi is 2nd argument. */
 	t->tf.rip = (uintptr_t) kernel_thread;
@@ -235,7 +249,7 @@ thread_create (const char *name, int priority,
 	/* Add to run queue. */
 	thread_unblock (t);
 
-	// ✅✅
+	// ✅
 	if(thread_get_priority() < priority){ // 현재 실행중인 스레드와 새로 추가하려는 스레드를 비교
 		thread_yield();					  // 만약 새로 추가하려는 스레드가 현재 실행중인 스레드보다 우선순위가 높으면 CPU를 선점
 	}
@@ -323,6 +337,8 @@ thread_tid (void) {
 void
 thread_exit (void) {
 	ASSERT (!intr_context ());
+	struct thread *curr = thread_current ();
+
 
 #ifdef USERPROG
 	process_exit ();
@@ -339,6 +355,7 @@ thread_exit (void) {
    may be scheduled again immediately at the scheduler's whim. */
 void
 thread_yield (void) {
+	if(thread_current() != idle_thread){
 	struct thread *curr = thread_current ();
 	enum intr_level old_level;
 
@@ -352,6 +369,8 @@ thread_yield (void) {
 		
 	do_schedule (THREAD_READY);
 	intr_set_level (old_level);
+	}
+
 }
 
 // ✅
@@ -539,12 +558,25 @@ init_thread (struct thread *t, const char *name, int priority) {
 	strlcpy (t->name, name, sizeof t->name);
 	t->tf.rsp = (uint64_t) t + PGSIZE - sizeof (void *);
 	t->priority = priority;
-	// ✅✅
+
+	// ✅
 	t->priority_base = priority; // 초기 priority 상태를 확인한다.
 	t->wait_on_lock = NULL; // 스레드 생성시에는 기다리는 락이 없으니 NULL값으로 설정한다.
 	list_init (&t->donations); // donations 초기화
-	// ✅✅
 	t->magic = THREAD_MAGIC;
+	// ✅
+
+	// ✅ System Call
+	t->exit_status = 0;
+	t->running = NULL;
+
+	// ✅ System Call
+	/* 자식 리스트 및 세마포어 초기화 */
+    list_init(&t->child_list);
+    sema_init(&t->wait_sema,0);
+    sema_init(&t->fork_sema,0);
+    sema_init(&t->free_sema,0);
+
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
