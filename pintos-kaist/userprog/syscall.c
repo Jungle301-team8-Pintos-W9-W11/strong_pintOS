@@ -8,12 +8,20 @@
 #include "threads/flags.h"
 #include "intrinsic.h"
 
-#include "threads/synch.h"
-struct lock filesys_lock;
+#include "filesys/filesys.h" // filesys_* func
+#include "filesys/file.h"		 // file_* func
+#include "threads/vaddr.h"	 // is_user_vaddr
+// #include "lib/user/syscall.h" 	// pid_t
+#include "threads/palloc.h" // palloc_get_page
+#include "lib/stdio.h"			// predefined fd
 
 /* userprog/syscall.h */
 void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
+
+static struct file *find_file_by_fd(int fd);
+void remove_file_from_fdt(int fd);
+int add_file_to_fdt(struct file *file);
 
 void get_argument(void *rsp, int argc, void *argv[]);
 void halt(void);
@@ -184,35 +192,67 @@ bool remove(const char *file)
 */
 int open(const char *file)
 {
-	check_address(file); // 주소 유효성 검사
-
-	struct file *open_file = filesys_open(file); // 파일 시스템에서 파일 열기
-	struct thread *curr = thread_current();
+	check_address(file);
+	struct file *open_file = filesys_open(file);
 
 	if (open_file == NULL)
 	{
 		return -1;
 	}
-	else
-	{
-		for (int i = 2; i < 64; i++)
-		{
-			if (curr->fdt[i] == NULL)
-			{
-				curr->fdt[i] = open_file;
-				return i;
-			}
-		}
-	}
-}
+	// fd table에 file추가
+	int fd = add_file_to_fdt(open_file);
 
+	// fd table 가득 찼을경우
+	if (fd == -1)
+	{
+		file_close(open_file);
+	}
+	return fd;
+}
 int filesize(int fd)
 {
-	return file_length(fd); //
+	struct file *open_file = find_file_by_fd(fd);
+	if (open_file == NULL)
+	{
+		return -1;
+	}
+	return file_length(open_file);
 }
 
 int read(int fd, void *buffer, unsigned size)
 {
+	check_address(buffer);
+	off_t read_byte;
+	uint8_t *read_buffer = buffer;
+	if (fd == 0)
+	{
+		char key;
+		for (read_byte = 0; read_byte < size; read_byte++)
+		{
+			key = input_getc();
+			*read_buffer++ = key;
+			if (key == '\0')
+			{
+				break;
+			}
+		}
+	}
+	else if (fd == 1)
+	{
+		return -1;
+	}
+	else
+	{
+		struct file *read_file = find_file_by_fd(fd);
+		if (read_file == NULL)
+		{
+			return -1;
+		}
+		lock_acquire(&filesys_lock);
+		read_byte = file_read(read_file, buffer, size);
+		lock_release(&filesys_lock);
+	}
+	return read_byte;
 }
 
 int write(int fd, const void *buffer, unsigned size)
@@ -227,12 +267,21 @@ int write(int fd, const void *buffer, unsigned size)
 
 void seek(int fd, unsigned position)
 {
+	struct file *seek_file = find_file_by_fd(fd);
+	// 0,1,2는 이미 정의되어 있음
+	if (seek_file <= 2)
+	{
+		return;
+	}
+	file_seek(seek_file, position);
 }
+
 /*
 open file인 fd에서 읽히거나 써질 의 다음 바이트 위치를 리턴
 
 */
-unsigned tell(int fd)
+unsigned
+tell(int fd)
 {
 	struct thread *curr = thread_current();
 	struct file *file = curr->fdt[fd];
@@ -245,6 +294,13 @@ unsigned tell(int fd)
 
 void close(int fd)
 {
+	struct file *fileobj = find_file_by_fd(fd);
+	if (fileobj == NULL)
+	{
+		return;
+	}
+
+	remove_file_from_fdt(fd);
 }
 
 // pid_t fork(const char *thread_name)
@@ -269,10 +325,51 @@ int dup2(int oldfd, int newfd)
 */
 void check_address(void *addr)
 {
-	if (addr == NULL)
+	// kernel VM 못가게, 할당된 page가 존재하도록(빈공간접근 못하게)
+	struct thread *cur = thread_current();
+	if (is_kernel_vaddr(addr) || pml4_get_page(cur->pml4, addr) == NULL)
+	{
 		exit(-1);
-	if (!is_user_vaddr(addr))
-		exit(-1);
-	if (pml4_get_page(thread_current()->pml4, addr) == NULL)
-		exit(-1);
+	}
+}
+
+static struct file *find_file_by_fd(int fd)
+{
+	struct thread *cur = thread_current();
+	if (fd < 0 || fd >= FDCOUNT_LIMIT)
+	{
+		return NULL;
+	}
+	return cur->fdt[fd];
+}
+
+int add_file_to_fdt(struct file *file)
+{
+	struct thread *cur = thread_current();
+	struct file **fdt = cur->fdt;
+
+	// Find open spot from the front
+	//  fd 위치가 제한 범위 넘지않고, fd table의 인덱스 위치와 일치한다면
+	while (cur->next_fd < FDCOUNT_LIMIT && fdt[cur->next_fd])
+	{
+		cur->next_fd++;
+	}
+
+	// error - fd table full
+	if (cur->next_fd >= FDCOUNT_LIMIT)
+		return -1;
+
+	fdt[cur->next_fd] = file;
+	return cur->next_fd;
+}
+
+void remove_file_from_fdt(int fd)
+{
+	struct thread *cur = thread_current();
+
+	// error : invalid fd
+	if (fd < 0 || fd >= FDCOUNT_LIMIT)
+		return;
+
+	cur->fdt[fd] = NULL;
 }
