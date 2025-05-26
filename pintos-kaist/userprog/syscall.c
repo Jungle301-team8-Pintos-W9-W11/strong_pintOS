@@ -23,12 +23,11 @@ static struct file *find_file_by_fd(int fd);
 void remove_file_from_fdt(int fd);
 int add_file_to_fdt(struct file *file);
 
-void get_argument(void *rsp, int argc, void *argv[]);
 void halt(void);
 void exit(int status);
 // pid_t fork(const char *thread_name, struct intr_frame *f);
-int exec(const char *file);
-int wait(tid_t pid);
+// int exec(const char *file);
+// int wait(tid_t pid);
 bool create(const char *file, unsigned initial_size);
 bool remove(const char *file);
 int open(const char *file);
@@ -53,7 +52,7 @@ unsigned tell(int fd);
 #define MSR_STAR 0xc0000081					/* Segment selector msr */
 #define MSR_LSTAR 0xc0000082				/* Long mode SYSCALL target */
 #define MSR_SYSCALL_MASK 0xc0000084 /* Mask for the eflags */
-#define FDCOUNT_LIMIT 1 << 9
+#define FDCOUNT_LIMIT 128
 
 typedef int pid_t;
 
@@ -97,9 +96,9 @@ void syscall_handler(struct intr_frame *f UNUSED)
 	// case SYS_FORK:
 	// 	f->R.rax = fork(f->R.rdi);
 	// 	break;
-	// case SYS_EXEC:
-	// 	if (exec(f->R.rdi) == -1)
-	// 		exit(-1);
+	case SYS_EXEC:
+		if (exec(f->R.rdi) == -1)
+			exit(-1);
 	// 	break;
 	// case SYS_WAIT:
 	// 	f->R.rax = wait(f->R.rdi);
@@ -136,7 +135,6 @@ void syscall_handler(struct intr_frame *f UNUSED)
 		break;
 	}
 	// printf ("system call!\n");
-	// thread_exit ();
 }
 
 void halt(void)
@@ -158,30 +156,16 @@ void exit(int status)
 bool create(const char *file, unsigned initial_size)
 {
 	check_address(file);
-	if (file == NULL)
-		exit(-1);
-
-	if (filesys_create(*file, initial_size))
-	{
-		return true;
-	}
-	else
-	{
-		return false;
-	}
+	lock_acquire(&filesys_lock);
+	bool result = filesys_create(file, initial_size);
+	lock_release(&filesys_lock);
+	return result;
 }
-
+// userprog/syscall.c
 bool remove(const char *file)
 {
 	check_address(file);
-	if (filesys_remove(file))
-	{
-		return true;
-	}
-	else
-	{
-		return false;
-	}
+	return filesys_remove(file);
 }
 
 /*
@@ -257,19 +241,38 @@ int read(int fd, void *buffer, unsigned size)
 
 int write(int fd, const void *buffer, unsigned size)
 {
-	if (fd == 1)
+	check_address(buffer);
+
+	int write_result;
+
+	if (fd == 0) // stdin
+	{
+		exit(-1);
+	}
+	else if (fd == 1) // stdout
 	{
 		putbuf(buffer, size);
 		return size;
 	}
-	return -1;
+	else
+	{
+		struct file *write_file = find_file_by_fd(fd);
+		if (write_file == NULL)
+		{
+			exit(-1);
+		}
+		lock_acquire(&filesys_lock);
+		off_t write_result = file_write(write_file, buffer, size);
+		lock_release(&filesys_lock);
+		return write_result;
+	}
 }
 
 void seek(int fd, unsigned position)
 {
 	struct file *seek_file = find_file_by_fd(fd);
 	// 0,1,2는 이미 정의되어 있음
-	if (seek_file <= 2)
+	if (fd < 2)
 	{
 		return;
 	}
@@ -289,7 +292,7 @@ tell(int fd)
 	{
 		exit(-1);
 	}
-	file_tell(file);
+	return file_tell(file);
 }
 
 void close(int fd)
@@ -307,9 +310,24 @@ void close(int fd)
 // { // !
 // }
 
-// int exec(const char *file)
-// {
-// }
+// userprog/syscall.c
+int exec(char *file_name)
+{
+	check_address(file_name);
+	int file_size = strlen(file_name) + 1;
+	char *fn_copy = palloc_get_page(PAL_ZERO);
+	if (fn_copy == NULL)
+	{
+		exit(-1);
+	}
+	strlcpy(fn_copy, file_name, file_size); // file 이름만 복사
+	if (process_exec(fn_copy) == -1)
+	{
+		return -1;
+	}
+	NOT_REACHED();
+	return 0;
+}
 
 // int wait(pid_t pid)
 // { // !
@@ -336,6 +354,8 @@ void check_address(void *addr)
 static struct file *find_file_by_fd(int fd)
 {
 	struct thread *cur = thread_current();
+	if (cur->fdt == NULL)
+		return NULL;
 	if (fd < 0 || fd >= FDCOUNT_LIMIT)
 	{
 		return NULL;
@@ -347,7 +367,8 @@ int add_file_to_fdt(struct file *file)
 {
 	struct thread *cur = thread_current();
 	struct file **fdt = cur->fdt;
-
+	if (cur->fdt == NULL)
+		return -1;
 	// Find open spot from the front
 	//  fd 위치가 제한 범위 넘지않고, fd table의 인덱스 위치와 일치한다면
 	while (cur->next_fd < FDCOUNT_LIMIT && fdt[cur->next_fd])
@@ -366,7 +387,8 @@ int add_file_to_fdt(struct file *file)
 void remove_file_from_fdt(int fd)
 {
 	struct thread *cur = thread_current();
-
+	if (cur->fdt == NULL)
+		return;
 	// error : invalid fd
 	if (fd < 0 || fd >= FDCOUNT_LIMIT)
 		return;
