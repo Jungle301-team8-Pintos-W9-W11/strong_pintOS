@@ -8,8 +8,13 @@
 #include "threads/flags.h"
 #include "intrinsic.h"
 
+#include "threads/synch.h"
+struct lock filesys_lock;
+
+/* userprog/syscall.h */
 void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
+void check_address(void *addr);
 
 /* System call.
  *
@@ -38,6 +43,8 @@ void syscall_init(void)
 	 * mode stack. Therefore, we masked the FLAG_FL. */
 	write_msr(MSR_SYSCALL_MASK,
 						FLAG_IF | FLAG_TF | FLAG_DF | FLAG_IOPL | FLAG_AC | FLAG_NT);
+
+	lock_init(&filesys_lock); // 파일 역시 공유 자원이기때문에 lock 초기화
 }
 
 /* The main system call interface */
@@ -241,9 +248,10 @@ int dup2(int oldfd, int newfd)
 */
 void check_address(void *addr)
 {
-	struct thread *t = thread_current();
-	if (!is_user_vaddr(addr) || addr == NULL)
-	{
+	if (addr == NULL)
 		exit(-1);
-	}
+	if (!is_user_vaddr(addr))
+		exit(-1);
+	if (pml4_get_page(thread_current()->pml4, addr) == NULL)
+		exit(-1);
 }

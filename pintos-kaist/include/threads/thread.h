@@ -29,6 +29,9 @@ typedef int tid_t;
 #define PRI_DEFAULT 31 /* Default priority. */
 #define PRI_MAX 63		 /* Highest priority. */
 
+#define FDT_PAGES 2
+#define FDT_COUNT_LIMIT 128
+
 /* A kernel thread or user process.
  *
  * Each thread structure is stored in its own 4 kB page.  The
@@ -106,8 +109,9 @@ struct thread
 	/* exit status*/
 
 #ifdef USERPROG
-	int exit_status;			// exit() 또는 wait() 구현에 사용되는 변수
-	struct file *fdt[64]; // 파일 디스크립터 테이블
+	int exit_status;	 // exit() 또는 wait() 구현에 사용되는 변수
+	struct file **fdt; // 파일 디스크립터 테이블
+	int next_fd;
 
 	uint64_t *pml4; /* Page map level 4 */
 #endif

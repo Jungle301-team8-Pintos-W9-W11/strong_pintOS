@@ -215,6 +215,11 @@ tid_t thread_create(const char *name, int priority,
 	t->tf.cs = SEL_KCSEG;
 	t->tf.eflags = FLAG_IF;
 
+	// FDT 활용
+	t->fdt = palloc_get_multiple(PAL_ZERO, FDT_PAGES); // 추가
+	if (t->fdt == NULL)																 // 추가
+		return TID_ERROR;																 // 추가
+
 	/* Add to run queue. */
 	/* compare the priorities of the currently running thread and the newly inserted one.
 	Yield the CPU if the newly arriving thread has higher priority*/
@@ -576,10 +581,7 @@ init_thread(struct thread *t, const char *name, int priority)
 	t->magic = THREAD_MAGIC;
 	t->origin_priority = priority;
 
-	for (int i = 0; i < 64; i++)
-	{
-		t->fdt[i] = NULL;
-	}
+	t->next_fd = 2;
 
 	list_init(&t->donations); // donation 리스트 시작
 }
