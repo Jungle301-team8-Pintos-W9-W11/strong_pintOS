@@ -26,10 +26,11 @@ static void process_cleanup(void);
 static bool load(const char *file_name, struct intr_frame *if_);
 static void initd(void *f_name);
 static void __do_fork(void *);
+static void argument_parse(char *file_name, int *argc_ptr, char *argv[]);
+static void argument_stack(int argc, char **argv, struct intr_frame *if_);
 
 /* General process initializer for initd and other process. */
-static void
-process_init(void)
+static void process_init(void)
 {
 	struct thread *current = thread_current();
 }
@@ -169,6 +170,7 @@ error:
 int process_exec(void *f_name)
 {
 	char *file_name = f_name;
+	// char *file_name_copy[48];
 	bool success;
 
 	/* We cannot use the intr_frame in the thread structure.
@@ -179,79 +181,27 @@ int process_exec(void *f_name)
 	_if.cs = SEL_UCSEG;
 	_if.eflags = FLAG_IF | FLAG_MBS;
 
+	int argc = 0;
+	char *argv[128]; // 64bit computer(uint64_t : 8byte)
+
 	/* We first kill the current context */
 	process_cleanup();
 
-	// 1.Break the command
-	char *token, *save_ptr;
-	char *argv[64];
-	int count = 0;
-
-	// file name에서 공백을 만나면 문자열 자르고 save_ptr에 다음 문자열 주소 저장
-	// 첫번째 호출
-	token = strtok_r(file_name, " ", &save_ptr); // args-single onearg 일경우 args-single
-
-	while (token != NULL)
-	{
-		argv[count] = token; // 자른 문자열 저장
-		count++;
-		token = strtok_r(NULL, " ", &save_ptr); // args-single onearg 일경우 args-single
-	}
+	argument_parse(file_name, &argc, argv);
 
 	/* And then load the binary */
-	success = load(file_name, &_if); // setup_stack 을 통해 rsp를 초기화 => argv 쌓기
+	success = load(file_name, &_if);
 
-	// 2. Place the words at the top of Stack
-	// first push 전 8의 배수로 round 후 push => 더 좋은 성능보장 목적
-	// argv의 마지먁 idx부터 들어가야함.
-
-	char *arg_stack_addrs[64]; // 문자열의 스택 주소를 저장하기 위함
-
-	for (int i = 0; i < count; i++)
-	{
-		uint16_t length = strlen(argv[i]);
-		_if.rsp = _if.rsp - (length + 1); // str의 길이 + \0 만큼 stack top pointer 이동(높은 주소 -> 낮은 주소)
-		arg_stack_addrs[i] = _if.rsp;			// TOS 주소 저장
-		// printf("addrval : %X\n", arg_stack_addrs[i]);
-		// printf("argv : %s, %d\n", argv[i], i);
-
-		memcpy(arg_stack_addrs[i], argv[i], length); // 주소에 argv 값 복사해서 저장(Stack에 push)
-	}
-
-	// Padding(8의 배수로 round up)
-	uintptr_t addrval = _if.rsp; // 현재 rsp (TOS) 주소값
-	// 8로 나눈 나머지가 0으로 채울 공간
-	while (_if.rsp % 8 != 0)
-	{
-		_if.rsp--; // 낮은 주소로 1바이트씩 이동
-		*((char *)_if.rsp) = 0;
-	}
-
-	// NULL 삽입
-	_if.rsp -= 8;						 // char * 사이즈 만큼 이동
-	*((char **)_if.rsp) = 0; // NULL 로 채우기
-
-	// 주소값 Push
-	// 3. Push the address of each string + null pointer(\0)
-	for (int i = count; i >= 0; i--)
-	{
-		_if.rsp -= 8;
-		*((char **)_if.rsp) = arg_stack_addrs[i];
-	}
-
-	// 4. %rsi가 argv(argv[0]) 가리키고, %rdi가 argc 가리키도록(Point)
-	_if.R.rdi = count;
-	_if.R.rsi = (char *)_if.rsp;
-	// 5. 가짜 return address push
-
-	_if.rsp -= sizeof(void *);
-	*((void **)_if.rsp) = 0;
-
-	// hex_dump(_if.rsp, _if.rsp, USER_STACK - _if.rsp, true);
 	/* If load failed, quit. */
-	palloc_free_page(file_name);
 	if (!success)
+	{
+		palloc_free_page(file_name);
 		return -1;
+	}
+
+	argument_stack(argc, argv, &_if);
+	// hex_dump(_if.rsp, _if.rsp, USER_STACK - _if.rsp, true); // 메모리에 적재된 상태 출력
+	palloc_free_page(file_name);
 
 	/* Start switched process. */
 	do_iret(&_if);
@@ -729,3 +679,47 @@ setup_stack(struct intr_frame *if_)
 	return success;
 }
 #endif /* VM */
+
+static void argument_parse(char *file_name, int *argc_ptr, char *argv[])
+{
+	char *token, *save_ptr;
+
+	for (token = strtok_r(file_name, " ", &save_ptr); token != NULL; token = strtok_r(NULL, " ", &save_ptr))
+		argv[(*argc_ptr)++] = token;
+
+	argv[*argc_ptr] = token;
+}
+
+static void argument_stack(int argc, char **argv, struct intr_frame *if_)
+{
+	char *argv_addr[128];
+	for (int i = argc - 1; i >= 0; i--)
+	{ // argument
+		if_->rsp -= strlen(argv[i]) + 1;
+		// if_->rsp = argv[i];
+		memcpy(if_->rsp, argv[i], strlen(argv[i]) + 1);
+		argv_addr[i] = if_->rsp;
+	}
+
+	while (if_->rsp % 8 > 0)
+	{
+		if_->rsp -= 1;
+		memset(if_->rsp, 0, 1);
+	}
+
+	if_->rsp -= sizeof(char *);
+	memset(if_->rsp, 0, sizeof(char *));
+
+	for (int i = argc - 1; i >= 0; i--)
+	{
+		if_->rsp -= sizeof(char *);
+		// if_->rsp = argv_addr[i];
+		memcpy(if_->rsp, &argv_addr[i], sizeof(char *));
+	}
+
+	if_->rsp -= sizeof(char *);
+	memset(if_->rsp, 0, sizeof(char *));
+
+	if_->R.rdi = argc;
+	if_->R.rsi = if_->rsp + 8;
+}

@@ -14,7 +14,24 @@ struct lock filesys_lock;
 /* userprog/syscall.h */
 void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
-void check_address(void *addr);
+
+void get_argument(void *rsp, int argc, void *argv[]);
+void halt(void);
+void exit(int status);
+// pid_t fork(const char *thread_name, struct intr_frame *f);
+int exec(const char *file);
+int wait(tid_t pid);
+bool create(const char *file, unsigned initial_size);
+bool remove(const char *file);
+int open(const char *file);
+int filesize(int fd);
+int read(int fd, void *buffer, unsigned length);
+int write(int fd, const void *buffer, unsigned length);
+void seek(int fd, unsigned position);
+unsigned tell(int fd);
+void close(int fd);
+
+unsigned tell(int fd);
 
 /* System call.
  *
@@ -57,31 +74,33 @@ void syscall_init(void)
 5번째 인자: %r8
 6번째 인자: %r9
 */
-void syscall_handler(struct intr_frame *f)
+void syscall_handler(struct intr_frame *f UNUSED)
 {
 	// TODO: Your implementation goes here.
-	// printf ("system call!\n");
-
-	char *fn_copy;
-
+	struct thread *curr = thread_current();
 	switch (f->R.rax)
-	{ // rax is the system call number
+	{
 	case SYS_HALT:
-		halt(); // pintos를 종료시키는 시스템 콜
+		halt();
 		break;
 	case SYS_EXIT:
-		exit(f->R.rdi); // 현재 프로세스를 종료시키는 시스템 콜
+		exit(f->R.rdi);
 		break;
-	case SYS_FORK:
-		f->R.rax = fork(f->R.rdi);
-		break;
-	case SYS_EXEC:
-		break;
-	case SYS_WAIT:
-		break;
+	// case SYS_FORK:
+	// 	f->R.rax = fork(f->R.rdi);
+	// 	break;
+	// case SYS_EXEC:
+	// 	if (exec(f->R.rdi) == -1)
+	// 		exit(-1);
+	// 	break;
+	// case SYS_WAIT:
+	// 	f->R.rax = wait(f->R.rdi);
+	// 	break;
 	case SYS_CREATE:
+		f->R.rax = create(f->R.rdi, f->R.rsi);
 		break;
 	case SYS_REMOVE:
+		f->R.rax = remove(f->R.rdi);
 		break;
 	case SYS_OPEN:
 		f->R.rax = open(f->R.rdi);
@@ -99,6 +118,7 @@ void syscall_handler(struct intr_frame *f)
 		seek(f->R.rdi, f->R.rsi);
 		break;
 	case SYS_TELL:
+		f->R.rax = tell(f->R.rdi);
 		break;
 	case SYS_CLOSE:
 		close(f->R.rdi);
@@ -107,6 +127,7 @@ void syscall_handler(struct intr_frame *f)
 		exit(-1);
 		break;
 	}
+	// printf ("system call!\n");
 	// thread_exit ();
 }
 
@@ -226,17 +247,17 @@ void close(int fd)
 {
 }
 
-pid_t fork(const char *thread_name)
-{ // !
-}
+// pid_t fork(const char *thread_name)
+// { // !
+// }
 
-int exec(const char *file)
-{
-}
+// int exec(const char *file)
+// {
+// }
 
-int wait(pid_t pid)
-{ // !
-}
+// int wait(pid_t pid)
+// { // !
+// }
 
 int dup2(int oldfd, int newfd)
 {
