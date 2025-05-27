@@ -11,6 +11,7 @@
 #include "threads/synch.h"
 #include "threads/vaddr.h"
 #include "intrinsic.h"
+#include "userprog/process.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -204,6 +205,7 @@ tid_t thread_create(const char *name, int priority,
 	init_thread(t, name, priority);
 	tid = t->tid = allocate_tid();
 
+	struct thread *cur = thread_current();
 	/* Call the kernel_thread if it scheduled.
 	 * Note) rdi is 1st argument, and rsi is 2nd argument. */
 	t->tf.rip = (uintptr_t)kernel_thread;
@@ -215,10 +217,9 @@ tid_t thread_create(const char *name, int priority,
 	t->tf.cs = SEL_KCSEG;
 	t->tf.eflags = FLAG_IF;
 
-	// FDT 활용
-	t->fdt = palloc_get_multiple(PAL_ZERO, FDT_PAGES); // 추가
-	if (t->fdt == NULL)																 // 추가
-		return TID_ERROR;																 // 추가
+	t->child_info = init_child(tid);
+
+	list_push_back(&cur->children, &t->child_info->c_elem);
 
 	/* Add to run queue. */
 	/* compare the priorities of the currently running thread and the newly inserted one.
@@ -580,9 +581,12 @@ init_thread(struct thread *t, const char *name, int priority)
 	t->priority = priority;
 	t->magic = THREAD_MAGIC;
 	t->origin_priority = priority;
+	for (int i = 0; i < 64; i++)
+	{
+		t->fdt[i] = NULL;
+	}
 
-	t->next_fd = 2;
-
+	list_init(&t->children);
 	list_init(&t->donations); // donation 리스트 시작
 }
 

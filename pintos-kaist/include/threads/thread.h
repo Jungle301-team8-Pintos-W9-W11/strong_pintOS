@@ -6,6 +6,7 @@
 #include <list.h>
 #include <stdint.h>
 #include "threads/interrupt.h"
+#include "synch.h"
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -28,9 +29,6 @@ typedef int tid_t;
 #define PRI_MIN 0			 /* Lowest priority. */
 #define PRI_DEFAULT 31 /* Default priority. */
 #define PRI_MAX 63		 /* Highest priority. */
-
-#define FDT_PAGES 2
-#define FDT_COUNT_LIMIT 128
 
 /* A kernel thread or user process.
  *
@@ -96,6 +94,9 @@ struct thread
 	enum thread_status status; /* Thread state. */
 	char name[16];						 /* Name (for debugging purposes). */
 	int priority;							 /* Priority. */
+	////////////////////////////////////////
+	// int fork_sema;//?? 초기화
+	////////////////////////////////////////
 	// donation_priority 저장용...?
 	int origin_priority;
 	int64_t wakeup_tick;			 /* local Tick*/
@@ -106,13 +107,11 @@ struct thread
 	struct list_elem elem;	 /* List element. */
 	struct list_elem d_elem; /* donation List 요소*/
 
-	/* exit status*/
+	// int64_t fd;
+	struct file *fdt[64];
 
 #ifdef USERPROG
-	int exit_status;	 // exit() 또는 wait() 구현에 사용되는 변수
-	struct file **fdt; // 파일 디스크립터 테이블
-	int next_fd;
-
+	/* Owned by userprog/process.c. */
 	uint64_t *pml4; /* Page map level 4 */
 #endif
 #ifdef VM
@@ -123,6 +122,28 @@ struct thread
 	/* Owned by thread.c. */
 	struct intr_frame tf; /* Information for switching */
 	unsigned magic;				/* Detects stack overflow. */
+
+	// struct thread parent_thread;
+	// struct list children_list;
+	// bool child_forked_ok;
+	int exit_status;
+
+	struct list children;
+	struct thread *parent;
+
+	struct child *child_info;
+	// struct child_status *cinfo;
+	struct file *running_file;
+};
+
+struct child
+{
+	tid_t tid;
+	int exit_status;
+	bool is_exit;
+	bool is_waited;
+	struct semaphore c_sema;
+	struct list_elem c_elem;
 };
 
 /* If false (default), use round-robin scheduler.
