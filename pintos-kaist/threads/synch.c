@@ -93,19 +93,19 @@ sema_down(struct semaphore *sema) {
 
     old_level = intr_disable();
 
-    // if (sema->value == 0) {
-    //     list_insert_ordered(&sema->waiters, &thread_current()->elem, cmp_priority, NULL); 
+    if (sema->value == 0) {
+        list_insert_ordered(&sema->waiters, &thread_current()->elem, cmp_priority, NULL); 
         
-    //     do {
-    //         thread_block();         // BLOCK 상태로 전환
-    //     } while (sema->value == 0); // 깨어나더라도 다시 확인 필요
-    // }
+        do {
+            thread_block();         // BLOCK 상태로 전환
+        } while (sema->value == 0); // 깨어나더라도 다시 확인 필요
+    }
 
-	while (sema->value == 0) { 
-		list_insert_ordered(&sema->waiters, &thread_current ()->elem, cmp_priority, NULL);
-		// list_push_back (&sema->waiters, &thread_current ()->elem);
-		thread_block ();
-	}
+	// while (sema->value == 0) { 
+	// 	list_insert_ordered(&sema->waiters, &thread_current ()->elem, cmp_priority, NULL);
+	// 	// list_push_back (&sema->waiters, &thread_current ()->elem);
+	// 	thread_block ();
+	// }
 
     sema->value--;                 
     intr_set_level(old_level);

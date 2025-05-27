@@ -21,12 +21,12 @@ Executing 'read-normal':
 (read-normal) end
 read-normal: exit(0)
 Execution of 'read-normal' complete.
-Timer: 88 ticks
-Thread: 36 idle ticks, 42 kernel ticks, 12 user ticks
+Timer: 78 ticks
+Thread: 38 idle ticks, 35 kernel ticks, 5 user ticks
 hd0:0: 0 reads, 0 writes
 hd0:1: 119 reads, 248 writes
 hd1:0: 105 reads, 0 writes
-Console: 1060 characters output
+Console: 1059 characters output
 Keyboard: 0 keys pressed
 Exception: 0 page faults
 Powering off...

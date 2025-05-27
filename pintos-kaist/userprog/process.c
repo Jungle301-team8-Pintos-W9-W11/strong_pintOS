@@ -18,9 +18,6 @@
 #include "threads/mmu.h"
 #include "threads/vaddr.h"
 #include "intrinsic.h"
-#ifdef VM
-#include "vm/vm.h"
-#endif
 
 #include "lib/user/syscall.h" // ✅
 
@@ -96,18 +93,18 @@ process_fork (const char *name, struct intr_frame *if_) {
 
 	struct thread *curr = thread_current();
 
-	memcpy(&curr->parent_if, if_, sizeof(struct intr_frame)); 
+	memcpy(&curr->parent_if, if_, sizeof(struct intr_frame)); // 전달받은 intr_frame을 parent_if필드에 복사한다.
 
-	tid_t tid = thread_create(name, curr->priority, __do_fork, curr); 
+	tid_t tid = thread_create(name, curr->priority, __do_fork, curr); // __do_fork를 실행하는 스레드 생성, 현재 스레드를 인자로 넘겨준다.
 	if (tid == TID_ERROR)
 		return TID_ERROR;
 
 	struct thread *child = get_child_process(tid);
-	sema_down(&child->fork_sema); 
+	sema_down(&child->fork_sema); // 자식 프로세스가 로드될 때까지 부모 프로세스는 대기한다.
 	if (child->exit_status == TID_ERROR)
 		return TID_ERROR;
 
-	return tid; 
+	return tid; // 부모 프로세스의 리턴값 : 생성한 자식 프로세스의 tid
 }
 
 
@@ -175,34 +172,27 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 static void
 __do_fork (void *aux) {
     struct intr_frame if_;
-    struct thread *parent = (struct thread *) aux; 
-    struct thread *current = thread_current (); 
+    struct thread *parent = (struct thread *) aux; // 부모 프로세스
+    struct thread *current = thread_current (); // 새로 생성된 자식 프로세스
     /* TODO: somehow pass the parent_if. (i.e. process_fork()'s if_) */
     /* TODO: process_fork의 두 번째 인자인 parent_if를 전달한다. */
     struct intr_frame *parent_if;
     bool succ = true;
 
-    parent_if = &parent->parent_if; 
+    parent_if = &parent->parent_if; // process_fork에서 복사 해두었던 intr_frame
     /* 1. Read the cpu context to local stack. */
+    /* 1. 부모의 인터럽트 프레임을 읽어온다.(if_로 복사) */
     memcpy (&if_, parent_if, sizeof (struct intr_frame));
 
-    if_.R.rax = 0; 
+    if_.R.rax = 0; // fork 시스템 콜의 결과로 자식 프로세스는 0을 리턴해야하므로 0을 넣어준다.
 
     /* 2. Duplicate PT */
-    current->pml4 = pml4_create(); 
+    /* 2. 페이지 테이블을 복제한다. */
+    current->pml4 = pml4_create(); // 부모의 pte를 복사하기 위해 페이지 테이블을 생성한다.
     if (current->pml4 == NULL)
         goto error;
 
     process_activate (current);
-#ifdef VM
-    supplemental_page_table_init (&current->spt);
-    if (!supplemental_page_table_copy (&current->spt, &parent->spt))
-        goto error;
-#else
-    // "pml4_for_each" : Apply FUNC to each available pte entries including kernel's.
-    if (!pml4_for_each (parent->pml4, duplicate_pte, parent)) 
-        goto error;
-#endif
 
     /* TODO: Your code goes here.
      * TODO: Hint) To duplicate the file object, use `file_duplicate`
@@ -216,29 +206,33 @@ __do_fork (void *aux) {
     if (parent->next_fd == FDCOUNT_LIMIT)
         goto error;
 
-    // ✅ 
+    // ✅ 파일 시스템 락을 사용하여 FDT 복제 과정의 동기화를 보장합니다.
+    //    이 락이 "make check" 도중 멈추는 원인이었다면,
+    //    filesys/file.c의 file_duplicate 내부 락을 제거한 상태에서 다시 시도해야 합니다.
     lock_acquire(&filesys_lock); // 파일 시스템 락 획득
 
-
+    // 부모의 fdt를 자식의 fdt로 복사한다.
     for (int fd = 2; fd < FDCOUNT_LIMIT; fd++) {
         struct file *file = parent->fdt[fd];
-        if (file == NULL) 
+        if (file == NULL) // fd 엔트리가 없는 상태에는 그냥 건너뛴다.
             continue;
         current->fdt[fd] = file_duplicate (file);
-        if (current->fdt[fd] == NULL) { 
+        if (current->fdt[fd] == NULL) { // 파일 복제에 실패한 경우
+            // 복제 실패 시 반드시 락을 해제해야 합니다.
             lock_release(&filesys_lock);
             goto error;
         }
     }
-    lock_release(&filesys_lock); 
+    lock_release(&filesys_lock); // 파일 시스템 락 해제
 
-    current->next_fd = parent->next_fd; 
-    sema_up(&current->fork_sema); 
+    current->next_fd = parent->next_fd; // 부모의 next_fd를 자식의 next_fd로 옮겨준다.
+    sema_up(&current->fork_sema); // fork가 정상적으로 완료되었으므로 현재 wait중인 parent를 다시 실행 가능 상태로 만든다.
 
     /* Finally, switch to the newly created process. */
+    /* 새로 생성된 프로세스에 대해 컨텍스트 스위치를 수행한다. */
     if (succ)
         do_iret (&if_);
-error: 
+error: // 제대로 복제가 안된 상태 - TID_ERROR 리턴
     sema_up(&current->fork_sema);
     exit(TID_ERROR);
     // thread_exit ();
@@ -253,7 +247,7 @@ error:
 // ✅
 int
 process_exec (void *f_name) {
-	char *file_name = f_name; 
+	char *file_name = f_name; // 실행할 파일 이름(argv[0])
 	// char *file_name_copy[48];
 	bool success;
 
@@ -271,6 +265,7 @@ process_exec (void *f_name) {
 	/* We first kill the current context */
 	process_cleanup ();
 
+	/* 커맨드 라인을 파싱한다. */
 	argument_parse(file_name, &argc, argv);
 
 	/* And then load the binary */
@@ -283,7 +278,7 @@ process_exec (void *f_name) {
 		return -1;
 	}
 
-	argument_stack(argc, argv, &_if);
+	argument_stack(argc, argv, &_if); // argc, argv로 커맨드 라인 파싱
 	// hex_dump(_if.rsp, _if.rsp, USER_STACK - _if.rsp, true); // 메모리에 적재된 상태 출력
 	palloc_free_page (file_name);
 
@@ -314,21 +309,22 @@ process_wait (tid_t child_tid UNUSED) {
 	// return -1;
 	struct thread *child = get_child_process(child_tid);
 
-	if(child == NULL)
+	if(child == NULL) // 해당 자식이 존재하지 않는다면 -1 리턴
 		return -1;
 
-	sema_down(&child->wait_sema); 
+	sema_down(&child->wait_sema); // 자식 프로세스가 종료할 때까지 대기한다.
+	// 컨텍스트 스위칭 발생
 
-	int exit_status = child->exit_status; 
+	int exit_status = child->exit_status; // 자식으로 부터 종료인자를 전달 받고 리스트에서 삭제한다.
 	list_remove(&child->child_elem);
 	
-	sema_up(&child->free_sema); 
+	sema_up(&child->free_sema); // 자식 프로세스 종료 상태를 받은 후 자식 프로세스를 종료하게 한다.
 
 	return exit_status;
 }
 
 
-
+/* Exit the process. This function is called by thread_exit (). */
 // ✅
 /* Exit the process. This function is called by thread_exit (). */
 void
@@ -341,16 +337,14 @@ process_exit (void) {
 	
 	for (int i = 0; i < FDCOUNT_LIMIT; i++){
 		close(i);
-	} 
+	} // 프로세스 종료 시, 해당 프로세스의 fdt의 모든 값을 0으로 만들어준다.
 
-	palloc_free_multiple(curr->fdt, FDT_PAGES); 
+	palloc_free_multiple(curr->fdt, FDT_PAGES); // fd table 메모리 해제
 
-	file_close(curr->running); 
+	file_close(curr->running); // 현재 프로세스가 실행중인 파일을 종료한다.	
 
-	process_cleanup ();
-
-	sema_up(&curr->wait_sema); 
-	sema_down(&curr->free_sema); 
+	sema_up(&curr->wait_sema); // 부모 프로세스가 자식 프로세스의 종료상태를 확인하게 한다.
+	sema_down(&curr->free_sema); // 부모 프로세스가 자식 프로세스의 종료 상태를 받을때 까지 대기한다. 
 	
 	process_cleanup ();
 }
@@ -361,9 +355,6 @@ static void
 process_cleanup (void) {
 	struct thread *curr = thread_current ();
 
-#ifdef VM
-	supplemental_page_table_kill (&curr->spt);
-#endif
 
 	uint64_t *pml4;
 	/* Destroy the current process's page directory and switch back
@@ -716,70 +707,7 @@ install_page (void *upage, void *kpage, bool writable) {
  * If you want to implement the function for only project 2, implement it on the
  * upper block. */
 
-static bool
-lazy_load_segment (struct page *page, void *aux) {
-	/* TODO: Load the segment from the file */
-	/* TODO: This called when the first page fault occurs on address VA. */
-	/* TODO: VA is available when calling this function. */
-}
-
-/* Loads a segment starting at offset OFS in FILE at address
- * UPAGE.  In total, READ_BYTES + ZERO_BYTES bytes of virtual
- * memory are initialized, as follows:
- *
- * - READ_BYTES bytes at UPAGE must be read from FILE
- * starting at offset OFS.
- *
- * - ZERO_BYTES bytes at UPAGE + READ_BYTES must be zeroed.
- *
- * The pages initialized by this function must be writable by the
- * user process if WRITABLE is true, read-only otherwise.
- *
- * Return true if successful, false if a memory allocation error
- * or disk read error occurs. */
-static bool
-load_segment (struct file *file, off_t ofs, uint8_t *upage,
-		uint32_t read_bytes, uint32_t zero_bytes, bool writable) {
-	ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);
-	ASSERT (pg_ofs (upage) == 0);
-	ASSERT (ofs % PGSIZE == 0);
-
-	while (read_bytes > 0 || zero_bytes > 0) {
-		/* Do calculate how to fill this page.
-		 * We will read PAGE_READ_BYTES bytes from FILE
-		 * and zero the final PAGE_ZERO_BYTES bytes. */
-		size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
-		size_t page_zero_bytes = PGSIZE - page_read_bytes;
-
-		/* TODO: Set up aux to pass information to the lazy_load_segment. */
-		void *aux = NULL;
-		if (!vm_alloc_page_with_initializer (VM_ANON, upage,
-					writable, lazy_load_segment, aux))
-			return false;
-
-		/* Advance. */
-		read_bytes -= page_read_bytes;
-		zero_bytes -= page_zero_bytes;
-		upage += PGSIZE;
-	}
-	return true;
-}
-
-/* Create a PAGE of stack at the USER_STACK. Return true on success. */
-static bool
-setup_stack (struct intr_frame *if_) {
-	bool success = false;
-	void *stack_bottom = (void *) (((uint8_t *) USER_STACK) - PGSIZE);
-
-	/* TODO: Map the stack on stack_bottom and claim the page immediately.
-	 * TODO: If success, set the rsp accordingly.
-	 * TODO: You should mark the page is stack. */
-	/* TODO: Your code goes here */
-
-	return success;
-}
-#endif /* VM */
-
+#endif 
 
 
 // ✅
@@ -793,16 +721,18 @@ static void argument_parse(char *file_name, int *argc_ptr, char *argv[]){
 }
 
 // ✅
+/* argument_stack: memcpy/memset의 첫 인자를 (void*)로 캐스트하고,
+   스택 얼라인, argv 포인터 배열, fake return address까지 모두 처리 */
 static void argument_stack(int argc, char **argv, struct intr_frame *if_){
 	char *argv_addr[128];
 	for (int i = argc - 1; i >= 0; i--){ // argument
 		if_->rsp -= strlen(argv[i]) + 1;
 		// if_->rsp = argv[i];
-		memcpy(if_->rsp, argv[i], strlen(argv[i]) + 1); 
+		memcpy(if_->rsp, argv[i], strlen(argv[i]) + 1); // *(if_->rsp) = *argv[1]; 'if_->rsp'의 크기를 몰라서 이렇게 하면 안됨
 		argv_addr[i] = if_->rsp;
 	}
 
-	while (if_->rsp % 8 > 0){ 
+	while (if_->rsp % 8 > 0){ // word-aline padding
 		if_->rsp -= 1;
 		memset(if_->rsp, 0, 1);
 	}
@@ -828,11 +758,12 @@ struct thread *get_child_process(int pid){
 	struct thread *curr = thread_current();
 	struct list *child_list = &curr->child_list;
 
+	// 자식 리스트를 순회하면서 프로세스 디스크립터 검색
 	for (struct list_elem *e = list_begin(child_list); e != list_end(child_list); e = list_next(e))
 	{
 		struct thread *t = list_entry(e, struct thread, child_elem);
-		if (t->tid == pid) 
+		if (t->tid == pid) // 해당 pid가 존재하면 프로세스 디스크립터 리턴
 			return t;
 	}
-	return NULL; 
+	return NULL; // 리스트에 존재하지 않으면 NULL
 }

@@ -26,12 +26,12 @@ child-close: exit(0)
 (multi-child-fd) end
 multi-child-fd: exit(0)
 Execution of 'multi-child-fd' complete.
-Timer: 87 ticks
-Thread: 40 idle ticks, 36 kernel ticks, 11 user ticks
+Timer: 78 ticks
+Thread: 34 idle ticks, 38 kernel ticks, 6 user ticks
 hd0:0: 0 reads, 0 writes
 hd0:1: 204 reads, 488 writes
 hd1:0: 220 reads, 0 writes
-Console: 1244 characters output
+Console: 1243 characters output
 Keyboard: 0 keys pressed
 Exception: 0 page faults
 Powering off...
