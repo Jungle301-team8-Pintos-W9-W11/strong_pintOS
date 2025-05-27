@@ -11,6 +11,7 @@
 #include "threads/synch.h"
 #include "threads/vaddr.h"
 #include "intrinsic.h"
+#include "userprog/process.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -119,11 +120,14 @@ void thread_init(void)
 	list_init(&sleep_list); // ✅ thread init 시 sleep list 추가
 	list_init(&destruction_req);
 
+	
 	/* Set up a thread structure for the running thread. */
 	initial_thread = running_thread();
 	init_thread(initial_thread, "main", PRI_DEFAULT);
 	initial_thread->status = THREAD_RUNNING;
 	initial_thread->tid = allocate_tid();
+
+	
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -204,6 +208,7 @@ tid_t thread_create(const char *name, int priority,
 	init_thread(t, name, priority);
 	tid = t->tid = allocate_tid();
 
+	struct thread *cur = thread_current();
 	/* Call the kernel_thread if it scheduled.
 	 * Note) rdi is 1st argument, and rsi is 2nd argument. */
 	t->tf.rip = (uintptr_t)kernel_thread;
@@ -214,6 +219,11 @@ tid_t thread_create(const char *name, int priority,
 	t->tf.ss = SEL_KDSEG;
 	t->tf.cs = SEL_KCSEG;
 	t->tf.eflags = FLAG_IF;
+
+	t->child_info = init_child(tid);
+
+
+	list_push_back(&cur->children, &t->child_info->c_elem);
 
 	/* Add to run queue. */
 	/* compare the priorities of the currently running thread and the newly inserted one.
@@ -577,7 +587,8 @@ init_thread(struct thread *t, const char *name, int priority)
 	for (int i=0; i<64; i++){
 		t->fdt[i] = NULL;
 	}
-
+	
+	list_init(&t->children);
 	list_init(&t->donations); // donation 리스트 시작
 }
 

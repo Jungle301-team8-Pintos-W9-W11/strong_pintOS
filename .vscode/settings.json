@@ -31,6 +31,9 @@
         "system_error": "c",
         "typeinfo": "c",
         "utility": "c",
-        "interrupt.h": "c"
+        "interrupt.h": "c",
+        "main.h": "c",
+        "flags.h": "c",
+        "filesys.h": "c"
     }
 }

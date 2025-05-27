@@ -5,6 +5,7 @@
 #include <list.h>
 #include <stdint.h>
 #include "threads/interrupt.h"
+#include "synch.h"
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -92,6 +93,9 @@ struct thread
 	enum thread_status status; /* Thread state. */
 	char name[16];						 /* Name (for debugging purposes). */
 	int priority;							 /* Priority. */
+	////////////////////////////////////////
+	// int fork_sema;//?? 초기화
+	////////////////////////////////////////
 	// donation_priority 저장용...?
 	int origin_priority;
 	int64_t wakeup_tick;			 /* local Tick*/
@@ -117,6 +121,30 @@ struct thread
 	/* Owned by thread.c. */
 	struct intr_frame tf; /* Information for switching */
 	unsigned magic;				/* Detects stack overflow. */
+
+
+	// struct thread parent_thread;
+	// struct list children_list;
+	// bool child_forked_ok;
+	int exit_status;
+	
+	struct list children;
+	struct thread *parent;
+
+	struct child *child_info;
+	// struct child_status *cinfo;
+	struct file *running_file;
+
+
+};
+
+struct child{
+	tid_t tid;
+	int exit_status;
+	bool is_exit;
+	bool is_waited;
+	struct semaphore c_sema;
+	struct list_elem c_elem;
 };
 
 /* If false (default), use round-robin scheduler.
