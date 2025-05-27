@@ -28,12 +28,12 @@ child-rox: exit(12)
 (rox-child) end
 rox-child: exit(0)
 Execution of 'rox-child' complete.
-Timer: 81 ticks
-Thread: 34 idle ticks, 39 kernel ticks, 8 user ticks
+Timer: 97 ticks
+Thread: 36 idle ticks, 46 kernel ticks, 16 user ticks
 hd0:0: 0 reads, 0 writes
 hd0:1: 176 reads, 480 writes
 hd1:0: 220 reads, 0 writes
-Console: 1189 characters output
+Console: 1190 characters output
 Keyboard: 0 keys pressed
 Exception: 0 page faults
 Powering off...

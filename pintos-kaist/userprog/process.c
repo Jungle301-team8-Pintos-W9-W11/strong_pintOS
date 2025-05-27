@@ -18,6 +18,9 @@
 #include "threads/mmu.h"
 #include "threads/vaddr.h"
 #include "intrinsic.h"
+#ifdef VM
+#include "vm/vm.h"
+#endif
 
 #include "lib/user/syscall.h" // ✅
 
@@ -193,6 +196,15 @@ __do_fork (void *aux) {
         goto error;
 
     process_activate (current);
+#ifdef VM
+    supplemental_page_table_init (&current->spt);
+    if (!supplemental_page_table_copy (&current->spt, &parent->spt))
+        goto error;
+#else
+    // "pml4_for_each" : Apply FUNC to each available pte entries including kernel's.
+    if (!pml4_for_each (parent->pml4, duplicate_pte, parent)) // "duplicate_pte" : 페이지 테이블을 복제하는 함수(부모 -> 자식)
+        goto error;
+#endif
 
     /* TODO: Your code goes here.
      * TODO: Hint) To duplicate the file object, use `file_duplicate`
@@ -343,6 +355,8 @@ process_exit (void) {
 
 	file_close(curr->running); // 현재 프로세스가 실행중인 파일을 종료한다.	
 
+	process_cleanup ();
+
 	sema_up(&curr->wait_sema); // 부모 프로세스가 자식 프로세스의 종료상태를 확인하게 한다.
 	sema_down(&curr->free_sema); // 부모 프로세스가 자식 프로세스의 종료 상태를 받을때 까지 대기한다. 
 	
@@ -355,6 +369,9 @@ static void
 process_cleanup (void) {
 	struct thread *curr = thread_current ();
 
+#ifdef VM
+	supplemental_page_table_kill (&curr->spt);
+#endif
 
 	uint64_t *pml4;
 	/* Destroy the current process's page directory and switch back
@@ -707,7 +724,70 @@ install_page (void *upage, void *kpage, bool writable) {
  * If you want to implement the function for only project 2, implement it on the
  * upper block. */
 
-#endif 
+static bool
+lazy_load_segment (struct page *page, void *aux) {
+	/* TODO: Load the segment from the file */
+	/* TODO: This called when the first page fault occurs on address VA. */
+	/* TODO: VA is available when calling this function. */
+}
+
+/* Loads a segment starting at offset OFS in FILE at address
+ * UPAGE.  In total, READ_BYTES + ZERO_BYTES bytes of virtual
+ * memory are initialized, as follows:
+ *
+ * - READ_BYTES bytes at UPAGE must be read from FILE
+ * starting at offset OFS.
+ *
+ * - ZERO_BYTES bytes at UPAGE + READ_BYTES must be zeroed.
+ *
+ * The pages initialized by this function must be writable by the
+ * user process if WRITABLE is true, read-only otherwise.
+ *
+ * Return true if successful, false if a memory allocation error
+ * or disk read error occurs. */
+static bool
+load_segment (struct file *file, off_t ofs, uint8_t *upage,
+		uint32_t read_bytes, uint32_t zero_bytes, bool writable) {
+	ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);
+	ASSERT (pg_ofs (upage) == 0);
+	ASSERT (ofs % PGSIZE == 0);
+
+	while (read_bytes > 0 || zero_bytes > 0) {
+		/* Do calculate how to fill this page.
+		 * We will read PAGE_READ_BYTES bytes from FILE
+		 * and zero the final PAGE_ZERO_BYTES bytes. */
+		size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
+		size_t page_zero_bytes = PGSIZE - page_read_bytes;
+
+		/* TODO: Set up aux to pass information to the lazy_load_segment. */
+		void *aux = NULL;
+		if (!vm_alloc_page_with_initializer (VM_ANON, upage,
+					writable, lazy_load_segment, aux))
+			return false;
+
+		/* Advance. */
+		read_bytes -= page_read_bytes;
+		zero_bytes -= page_zero_bytes;
+		upage += PGSIZE;
+	}
+	return true;
+}
+
+/* Create a PAGE of stack at the USER_STACK. Return true on success. */
+static bool
+setup_stack (struct intr_frame *if_) {
+	bool success = false;
+	void *stack_bottom = (void *) (((uint8_t *) USER_STACK) - PGSIZE);
+
+	/* TODO: Map the stack on stack_bottom and claim the page immediately.
+	 * TODO: If success, set the rsp accordingly.
+	 * TODO: You should mark the page is stack. */
+	/* TODO: Your code goes here */
+
+	return success;
+}
+#endif /* VM */
+
 
 
 // ✅
